@@ -1,10 +1,10 @@
 MODEL EVALUATION REPORT
 =======================
 
-Accuracy  : 0.9989
-Precision : 0.9997
-Recall    : 0.9980
-F1-Score  : 0.9988
+Accuracy  : 0.9990
+Precision : 0.9996
+Recall    : 0.9983
+F1-Score  : 0.9989
 
 Classification Report:
               precision    recall  f1-score   support
