@@ -658,7 +658,13 @@ def main():
 
     if uploaded_file is not None:
         file_signature = f"{uploaded_file.name}_{uploaded_file.size}_{row_limit}"
-        if analyze_button or st.session_state.get("processed_file_id") != file_signature:
+        need_processing = (
+            analyze_button or 
+            st.session_state.get("dataset_records") is None or 
+            st.session_state.get("source_name") != uploaded_file.name or 
+            st.session_state.get("processed_file_id") != file_signature
+        )
+        if need_processing:
             target_stream = uploaded_file
             target_name = uploaded_file.name
             st.session_state["processed_file_id"] = file_signature
@@ -781,21 +787,38 @@ def main():
     # ------------------------------------------------------------------------------
     with tab_analytics:
         if records is None:
-            render_html("""
-            <div class="empty-state-box">
-                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="margin: 0 auto;">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                    <polyline points="17 8 12 3 7 8"/>
-                    <line x1="12" y1="3" x2="12" y2="15"/>
-                </svg>
-                <div class="empty-state-title">No Security Data Ingested</div>
-                <div class="empty-state-text">
-                    Upload any network traffic log, flow dataset (CIC-IDS), or cybersecurity incidents CSV 
-                    using the sidebar file uploader, then click Process & Ingest to populate live telemetry and analytics.
-                    See the Attack Types Manual tab for supported attack categories.
+            if uploaded_file is not None:
+                render_html(f"""
+                <div class="empty-state-box">
+                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="margin: 0 auto;">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                        <polyline points="14 2 14 8 20 8"/>
+                        <line x1="16" y1="13" x2="8" y2="13"/>
+                        <line x1="16" y1="17" x2="8" y2="17"/>
+                        <polyline points="10 9 9 9 8 9"/>
+                    </svg>
+                    <div class="empty-state-title" style="color: #1e40af;">File Attached: {uploaded_file.name}</div>
+                    <div class="empty-state-text">
+                        File ready ({uploaded_file.size / 1024:.1f} KB). Click <strong>Process &amp; Ingest</strong> in the sidebar to run analysis.
+                    </div>
                 </div>
-            </div>
-            """)
+                """)
+            else:
+                render_html("""
+                <div class="empty-state-box">
+                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="margin: 0 auto;">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <polyline points="17 8 12 3 7 8"/>
+                        <line x1="12" y1="3" x2="12" y2="15"/>
+                    </svg>
+                    <div class="empty-state-title">No Security Data Ingested</div>
+                    <div class="empty-state-text">
+                        Upload any network traffic log, flow dataset (CIC-IDS), or cybersecurity incidents CSV 
+                        using the sidebar file uploader, then click Process & Ingest to populate live telemetry and analytics.
+                        See the Attack Types Manual tab for supported attack categories.
+                    </div>
+                </div>
+                """)
         elif data_mode == "INCIDENT":
             # ==================================================================
             # Render Mode: Cyber Attack Incident & Threat Intelligence

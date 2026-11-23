@@ -14,6 +14,7 @@ const btnProcess = document.getElementById('btnProcess');
 const sampleLimit = document.getElementById('sampleLimit');
 const fileUploadFeedback = document.getElementById('fileUploadFeedback');
 const fileInfoText = document.getElementById('fileInfoText');
+const fileSubDisplay = document.getElementById('fileSubDisplay');
 
 const emptyState = document.getElementById('emptyState');
 const telemetryView = document.getElementById('telemetryView');
@@ -34,7 +35,8 @@ if (btnClearData) {
     currentDataset = null;
     currentMode = null;
     rawCSVData = [];
-    fileNameDisplay.textContent = 'Upload CSV File';
+    if (fileNameDisplay) fileNameDisplay.textContent = 'Upload CSV File';
+    if (fileSubDisplay) fileSubDisplay.textContent = 'Drag and drop or click to browse';
     fileInput.value = '';
     if (fileUploadFeedback) fileUploadFeedback.style.display = 'none';
     emptyState.style.display = 'block';
@@ -53,42 +55,49 @@ tabButtons.forEach(btn => {
     tabContents.forEach(c => c.classList.remove('active'));
     btn.classList.add('active');
     const tabId = btn.getAttribute('data-tab');
-    document.getElementById(tabId).classList.add('active');
+    const targetContent = document.getElementById(tabId);
+    if (targetContent) targetContent.classList.add('active');
   });
 });
 
 function handleFileSelection(file) {
-  fileNameDisplay.textContent = file.name;
+  if (!file) return;
   const sizeKb = (file.size / 1024).toFixed(1);
+  if (fileNameDisplay) fileNameDisplay.textContent = file.name;
+  if (fileSubDisplay) fileSubDisplay.textContent = `${sizeKb} KB - Parsing & Ingesting...`;
   if (fileUploadFeedback && fileInfoText) {
-    fileInfoText.textContent = `${file.name} (${sizeKb} KB) - Loading...`;
+    fileInfoText.textContent = `${file.name} (${sizeKb} KB) - Analyzing...`;
     fileUploadFeedback.style.display = 'block';
   }
   readCSVFile(file);
 }
 
 // File Drag & Drop
-dropzone.addEventListener('click', () => fileInput.click());
-fileInput.addEventListener('change', (e) => {
-  if (e.target.files.length > 0) {
-    handleFileSelection(e.target.files[0]);
-  }
-});
+if (dropzone) {
+  dropzone.addEventListener('click', () => fileInput.click());
+  dropzone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    dropzone.style.borderColor = '#2563eb';
+  });
+  dropzone.addEventListener('dragleave', () => {
+    dropzone.style.borderColor = '#cbd5e1';
+  });
+  dropzone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropzone.style.borderColor = '#cbd5e1';
+    if (e.dataTransfer && e.dataTransfer.files.length > 0) {
+      handleFileSelection(e.dataTransfer.files[0]);
+    }
+  });
+}
 
-dropzone.addEventListener('dragover', (e) => {
-  e.preventDefault();
-  dropzone.style.borderColor = '#2563eb';
-});
-dropzone.addEventListener('dragleave', () => {
-  dropzone.style.borderColor = '#cbd5e1';
-});
-dropzone.addEventListener('drop', (e) => {
-  e.preventDefault();
-  dropzone.style.borderColor = '#cbd5e1';
-  if (e.dataTransfer.files.length > 0) {
-    handleFileSelection(e.dataTransfer.files[0]);
-  }
-});
+if (fileInput) {
+  fileInput.addEventListener('change', (e) => {
+    if (e.target.files && e.target.files.length > 0) {
+      handleFileSelection(e.target.files[0]);
+    }
+  });
+}
 
 function readCSVFile(file) {
   Papa.parse(file, {
@@ -96,25 +105,38 @@ function readCSVFile(file) {
     dynamicTyping: true,
     skipEmptyLines: true,
     complete: function(results) {
+      if (!results.data || results.data.length === 0) {
+        alert('The uploaded CSV file contains no valid rows.');
+        return;
+      }
       rawCSVData = results.data;
       currentDataset = file.name;
       const sizeKb = (file.size / 1024).toFixed(1);
+      if (fileNameDisplay) fileNameDisplay.textContent = file.name;
+      if (fileSubDisplay) fileSubDisplay.textContent = `${sizeKb} KB (${results.data.length.toLocaleString()} rows) - Ingested`;
       if (fileUploadFeedback && fileInfoText) {
         fileInfoText.textContent = `${file.name} (${sizeKb} KB, ${results.data.length.toLocaleString()} rows)`;
         fileUploadFeedback.style.display = 'block';
       }
+      // AUTO-PROCESS IMMEDIATELY SO DASHBOARD UPDATES UPON FILE SELECTION
+      processDataset(rawCSVData, file.name);
+    },
+    error: function(err) {
+      alert('Error parsing CSV file: ' + err.message);
     }
   });
 }
 
 // Ingestion Trigger
-btnProcess.addEventListener('click', () => {
-  if (!rawCSVData || rawCSVData.length === 0) {
-    alert('Please upload a CSV file first.');
-    return;
-  }
-  processDataset(rawCSVData, currentDataset || 'uploaded_data.csv');
-});
+if (btnProcess) {
+  btnProcess.addEventListener('click', () => {
+    if (!rawCSVData || rawCSVData.length === 0) {
+      alert('Please upload a CSV file first.');
+      return;
+    }
+    processDataset(rawCSVData, currentDataset || 'uploaded_data.csv');
+  });
+}
 
 // Detect Schema
 function detectSchema(data) {
@@ -198,9 +220,9 @@ function processDataset(data, fileName) {
   telemetryView.style.display = 'block';
 
   renderBanner(schema, fileName, processedRows.length);
-  renderKPIs(schema, processedRows, normalCount, anomalyCount, durationMs);
-  renderCharts(schema, processedRows);
-  renderTableLogs(schema, processedRows);
+  try { renderKPIs(schema, processedRows, normalCount, anomalyCount, durationMs); } catch (e) { console.error('KPI error:', e); }
+  try { renderCharts(schema, processedRows); } catch (e) { console.error('Charts error:', e); }
+  try { renderTableLogs(schema, processedRows); } catch (e) { console.error('Table logs error:', e); }
 }
 
 // Banner
