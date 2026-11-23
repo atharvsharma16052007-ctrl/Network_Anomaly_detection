@@ -58,12 +58,12 @@
         <button class="btn btn-secondary" id="btnClearData">Clear Data</button>
       </div>
 
-      <div class="section-label" style="margin-top: 18px;">Quick Built-in Datasets</div>
-      <div class="btn-grid">
-        <button class="btn btn-secondary" id="btnLoadIncidents">Threat Incidents</button>
-        <button class="btn btn-secondary" id="btnLoadPackets">KDD Packets</button>
+      <!-- File Upload Feedback -->
+      <div id="fileUploadFeedback" style="display: none; background-color: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; padding: 10px 14px; margin: 8px 0;">
+        <div style="font-size: 12px; font-weight: 600; color: #1e40af;">File Ready</div>
+        <div id="fileInfoText" style="font-size: 11px; color: #334155; margin-top: 2px;"></div>
+        <div style="font-size: 11px; color: #64748b; margin-top: 2px;">Click <strong>Process &amp; Ingest</strong> to analyze</div>
       </div>
-      <button class="btn btn-secondary" id="btnLoadFlow" style="width: 100%; margin-top: 8px;">Flow Telemetry (CIC-IDS)</button>
 
       <!-- Engine Specs Badge -->
       <div class="spec-card">
@@ -103,6 +103,7 @@
         <button class="tab-button active" data-tab="tab-analytics">Threat & Telemetry Analytics</button>
         <button class="tab-button" data-tab="tab-logs">Record Logs & Export</button>
         <button class="tab-button" data-tab="tab-history" id="tabHistoryBtn">Ingestion History (0)</button>
+        <button class="tab-button" data-tab="tab-manual">Attack Types Manual</button>
       </div>
 
       <!-- Tab 1: Threat & Telemetry Analytics -->
@@ -116,8 +117,9 @@
           </svg>
           <div class="empty-state-title">No Security Data Ingested</div>
           <div class="empty-state-text">
-            Upload any network traffic log, flow dataset (CIC-IDS), or cybersecurity incidents CSV in the sidebar, or click one of the 
-            quick dataset buttons to populate live telemetry and analytics.
+            Upload any network traffic log, flow dataset (CIC-IDS), or cybersecurity incidents CSV 
+            using the sidebar file uploader, then click Process &amp; Ingest to populate live telemetry and analytics.
+            See the Attack Types Manual tab for supported attack categories.
           </div>
         </div>
 
@@ -195,6 +197,95 @@
             <div class="empty-state-text">Each processed upload will automatically create an audit record here during this session.</div>
           </div>
           <div id="historyList" class="history-list"></div>
+        </div>
+      </section>
+
+      <!-- Tab 4: Attack Types Manual -->
+      <section class="tab-content" id="tab-manual">
+        <div style="font-size: 12px; font-weight: 700; letter-spacing: 0.05em; color: #64748b; text-transform: uppercase; margin: 10px 0;">NETWORK ATTACK TYPES REFERENCE GUIDE</div>
+        <div style="background-color: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; padding: 12px 16px; margin-bottom: 16px; font-size: 12px; color: #1e40af;">
+          This reference guide describes common network attack categories detected by the Netshield engine.
+          Upload a CSV dataset matching any of the supported schemas to run anomaly detection.
+        </div>
+
+        <div style="font-size: 13px; font-weight: 700; color: #0f172a; margin: 16px 0 8px 0;">NSL-KDD Attack Categories (Packet-Level)</div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div class="netshield-card">
+            <div style="font-size: 12px; font-weight: 700; color: #dc2626; margin-bottom: 6px;">DoS (Denial of Service)</div>
+            <div style="font-size: 11px; color: #334155; line-height: 1.6;">Overwhelms a target system with excessive traffic or requests to make it unavailable.</div>
+            <div style="font-size: 11px; color: #64748b; margin-top: 6px;"><strong>Examples:</strong> neptune, smurf, back, teardrop, pod, land</div>
+          </div>
+          <div class="netshield-card">
+            <div style="font-size: 12px; font-weight: 700; color: #8b5cf6; margin-bottom: 6px;">R2L (Remote to Local)</div>
+            <div style="font-size: 11px; color: #334155; line-height: 1.6;">Unauthorized access from a remote machine to a local account by exploiting vulnerabilities.</div>
+            <div style="font-size: 11px; color: #64748b; margin-top: 6px;"><strong>Examples:</strong> warezclient, guess_passwd, ftp_write, imap</div>
+          </div>
+          <div class="netshield-card">
+            <div style="font-size: 12px; font-weight: 700; color: #f59e0b; margin-bottom: 6px;">Probe (Reconnaissance)</div>
+            <div style="font-size: 11px; color: #334155; line-height: 1.6;">Scans and gathers information about target systems to identify vulnerabilities.</div>
+            <div style="font-size: 11px; color: #64748b; margin-top: 6px;"><strong>Examples:</strong> satan, ipsweep, portsweep, nmap</div>
+          </div>
+          <div class="netshield-card">
+            <div style="font-size: 12px; font-weight: 700; color: #059669; margin-bottom: 6px;">U2R (User to Root)</div>
+            <div style="font-size: 11px; color: #334155; line-height: 1.6;">Privilege escalation where a normal user gains root/admin access through exploits.</div>
+            <div style="font-size: 11px; color: #64748b; margin-top: 6px;"><strong>Examples:</strong> buffer_overflow, rootkit, perl, loadmodule</div>
+          </div>
+        </div>
+
+        <div style="font-size: 13px; font-weight: 700; color: #0f172a; margin: 20px 0 8px 0;">CIC-IDS Flow-Level Attack Types</div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px;">
+          <div class="netshield-card">
+            <div style="font-size: 12px; font-weight: 700; color: #dc2626; margin-bottom: 4px;">DDoS</div>
+            <div style="font-size: 11px; color: #334155; line-height: 1.5;">Distributed Denial of Service floods targets from many sources simultaneously.</div>
+          </div>
+          <div class="netshield-card">
+            <div style="font-size: 12px; font-weight: 700; color: #ef4444; margin-bottom: 4px;">Brute Force</div>
+            <div style="font-size: 11px; color: #334155; line-height: 1.5;">Repeated login attempts using many password combinations to gain access.</div>
+          </div>
+          <div class="netshield-card">
+            <div style="font-size: 12px; font-weight: 700; color: #8b5cf6; margin-bottom: 4px;">Web Attack</div>
+            <div style="font-size: 11px; color: #334155; line-height: 1.5;">SQL Injection, XSS, and brute-force attacks targeting web applications.</div>
+          </div>
+          <div class="netshield-card">
+            <div style="font-size: 12px; font-weight: 700; color: #2563eb; margin-bottom: 4px;">PortScan</div>
+            <div style="font-size: 11px; color: #334155; line-height: 1.5;">Systematic scanning of a host to discover open ports and running services.</div>
+          </div>
+          <div class="netshield-card">
+            <div style="font-size: 12px; font-weight: 700; color: #f59e0b; margin-bottom: 4px;">Botnet</div>
+            <div style="font-size: 11px; color: #334155; line-height: 1.5;">Network of compromised devices controlled remotely for coordinated attacks.</div>
+          </div>
+          <div class="netshield-card">
+            <div style="font-size: 12px; font-weight: 700; color: #059669; margin-bottom: 4px;">Heartbleed</div>
+            <div style="font-size: 11px; color: #334155; line-height: 1.5;">Exploits OpenSSL vulnerability to read server memory and steal data.</div>
+          </div>
+        </div>
+
+        <div style="font-size: 13px; font-weight: 700; color: #0f172a; margin: 20px 0 8px 0;">Global Cyber Threat Incident Types</div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div class="netshield-card">
+            <div style="font-size: 12px; font-weight: 700; color: #dc2626; margin-bottom: 4px;">Malware</div>
+            <div style="font-size: 11px; color: #334155; line-height: 1.5;">Malicious software including viruses, trojans, worms, and spyware designed to damage or exploit systems.</div>
+          </div>
+          <div class="netshield-card">
+            <div style="font-size: 12px; font-weight: 700; color: #f59e0b; margin-bottom: 4px;">Phishing</div>
+            <div style="font-size: 11px; color: #334155; line-height: 1.5;">Social engineering attack using fraudulent emails or websites to steal credentials.</div>
+          </div>
+          <div class="netshield-card">
+            <div style="font-size: 12px; font-weight: 700; color: #ef4444; margin-bottom: 4px;">Ransomware</div>
+            <div style="font-size: 11px; color: #334155; line-height: 1.5;">Encrypts victim data and demands payment for decryption keys.</div>
+          </div>
+          <div class="netshield-card">
+            <div style="font-size: 12px; font-weight: 700; color: #8b5cf6; margin-bottom: 4px;">Man-in-the-Middle</div>
+            <div style="font-size: 11px; color: #334155; line-height: 1.5;">Intercepting communication between two parties to eavesdrop or alter data.</div>
+          </div>
+          <div class="netshield-card">
+            <div style="font-size: 12px; font-weight: 700; color: #2563eb; margin-bottom: 4px;">SQL Injection</div>
+            <div style="font-size: 11px; color: #334155; line-height: 1.5;">Inserts malicious SQL statements to manipulate or extract database information.</div>
+          </div>
+          <div class="netshield-card">
+            <div style="font-size: 12px; font-weight: 700; color: #059669; margin-bottom: 4px;">Zero-Day Exploit</div>
+            <div style="font-size: 11px; color: #334155; line-height: 1.5;">Attacks targeting previously unknown vulnerabilities before patches are available.</div>
+          </div>
         </div>
       </section>
     </main>

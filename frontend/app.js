@@ -12,10 +12,8 @@ const fileInput = document.getElementById('fileInput');
 const fileNameDisplay = document.getElementById('fileNameDisplay');
 const btnProcess = document.getElementById('btnProcess');
 const sampleLimit = document.getElementById('sampleLimit');
-
-const btnLoadIncidents = document.getElementById('btnLoadIncidents');
-const btnLoadPackets = document.getElementById('btnLoadPackets');
-const btnLoadFlow = document.getElementById('btnLoadFlow');
+const fileUploadFeedback = document.getElementById('fileUploadFeedback');
+const fileInfoText = document.getElementById('fileInfoText');
 
 const emptyState = document.getElementById('emptyState');
 const telemetryView = document.getElementById('telemetryView');
@@ -38,6 +36,7 @@ if (btnClearData) {
     rawCSVData = [];
     fileNameDisplay.textContent = 'Upload CSV File';
     fileInput.value = '';
+    if (fileUploadFeedback) fileUploadFeedback.style.display = 'none';
     emptyState.style.display = 'block';
     telemetryView.style.display = 'none';
     const logsContent = document.getElementById('logsContent');
@@ -58,13 +57,21 @@ tabButtons.forEach(btn => {
   });
 });
 
+function handleFileSelection(file) {
+  fileNameDisplay.textContent = file.name;
+  const sizeKb = (file.size / 1024).toFixed(1);
+  if (fileUploadFeedback && fileInfoText) {
+    fileInfoText.textContent = `${file.name} (${sizeKb} KB) - Loading...`;
+    fileUploadFeedback.style.display = 'block';
+  }
+  readCSVFile(file);
+}
+
 // File Drag & Drop
 dropzone.addEventListener('click', () => fileInput.click());
 fileInput.addEventListener('change', (e) => {
   if (e.target.files.length > 0) {
-    const file = e.target.files[0];
-    fileNameDisplay.textContent = file.name;
-    readCSVFile(file);
+    handleFileSelection(e.target.files[0]);
   }
 });
 
@@ -79,9 +86,7 @@ dropzone.addEventListener('drop', (e) => {
   e.preventDefault();
   dropzone.style.borderColor = '#cbd5e1';
   if (e.dataTransfer.files.length > 0) {
-    const file = e.dataTransfer.files[0];
-    fileNameDisplay.textContent = file.name;
-    readCSVFile(file);
+    handleFileSelection(e.dataTransfer.files[0]);
   }
 });
 
@@ -93,6 +98,11 @@ function readCSVFile(file) {
     complete: function(results) {
       rawCSVData = results.data;
       currentDataset = file.name;
+      const sizeKb = (file.size / 1024).toFixed(1);
+      if (fileUploadFeedback && fileInfoText) {
+        fileInfoText.textContent = `${file.name} (${sizeKb} KB, ${results.data.length.toLocaleString()} rows)`;
+        fileUploadFeedback.style.display = 'block';
+      }
     }
   });
 }
@@ -100,44 +110,11 @@ function readCSVFile(file) {
 // Ingestion Trigger
 btnProcess.addEventListener('click', () => {
   if (!rawCSVData || rawCSVData.length === 0) {
-    alert('Please upload a CSV file or click one of the quick built-in dataset buttons.');
+    alert('Please upload a CSV file first.');
     return;
   }
   processDataset(rawCSVData, currentDataset || 'uploaded_data.csv');
 });
-
-// Quick Built-in Datasets
-btnLoadIncidents.addEventListener('click', () => {
-  fetch('../dataset/Global_Cybersecurity_Threats_2015-2024.csv')
-    .then(res => res.text())
-    .then(text => parseAndRun(text, 'Global_Cybersecurity_Threats_2015-2024.csv'))
-    .catch(() => generateSampleIncidents());
-});
-
-btnLoadPackets.addEventListener('click', () => {
-  fetch('../dataset/user_test_input.csv')
-    .then(res => res.text())
-    .then(text => parseAndRun(text, 'user_test_input.csv'))
-    .catch(() => generateSamplePackets());
-});
-
-btnLoadFlow.addEventListener('click', () => {
-  fetch('../dataset/sample_traffic.csv')
-    .then(res => res.text())
-    .then(text => parseAndRun(text, 'sample_traffic.csv'))
-    .catch(() => generateSampleFlow());
-});
-
-function parseAndRun(csvText, fileName) {
-  Papa.parse(csvText, {
-    header: true,
-    dynamicTyping: true,
-    skipEmptyLines: true,
-    complete: function(results) {
-      processDataset(results.data, fileName);
-    }
-  });
-}
 
 // Detect Schema
 function detectSchema(data) {

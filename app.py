@@ -423,6 +423,8 @@ def detect_dataset_schema(df):
 
 def parse_any_csv(file_obj, nrows=None):
     """Robust parser that loads arbitrary CSV and detects quoted single-column wraps."""
+    if hasattr(file_obj, "seek"):
+        file_obj.seek(0)
     try:
         df = pd.read_csv(file_obj, nrows=nrows)
     except Exception:
@@ -605,6 +607,16 @@ def main():
             help="Upload network packet traffic, flow telemetry, or cyber attack incident logs"
         )
 
+        # Immediate file upload feedback
+        if uploaded_file is not None:
+            render_html(f"""
+            <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; padding: 10px 14px; margin: 8px 0;">
+                <div style="font-size: 12px; font-weight: 600; color: #166534;">✓ File Attached &amp; Loaded</div>
+                <div style="font-size: 11px; color: #334155; margin-top: 2px;"><b>{uploaded_file.name}</b> ({uploaded_file.size / 1024:.1f} KB)</div>
+                <div style="font-size: 11px; color: #15803d; margin-top: 2px;">Ready for analysis / auto-ingested</div>
+            </div>
+            """)
+
         row_limit = st.selectbox(
             "Sample Processing Limit",
             options=[1000, 5000, 10000, 25000, "All Records"],
@@ -625,21 +637,8 @@ def main():
             st.session_state["ground_truth"] = None
             st.session_state["inference_time"] = 0.0
             st.session_state["source_name"] = None
+            st.session_state["processed_file_id"] = None
             st.rerun()
-
-        render_html("<div style='font-size: 11px; font-weight: 600; color: #94a3b8; text-transform: uppercase; margin: 16px 0 8px 0;'>QUICK BUILT-IN DATASETS</div>")
-        col_s1, col_s2 = st.columns(2)
-        load_sample_attacks = False
-        load_sample_packets = False
-        load_sample_flow = False
-        with col_s1:
-            if st.button("Threat Incidents", use_container_width=True):
-                load_sample_attacks = True
-        with col_s2:
-            if st.button("KDD Packets", use_container_width=True):
-                load_sample_packets = True
-        if st.button("Flow Telemetry (CIC-IDS)", use_container_width=True):
-            load_sample_flow = True
 
         # Pipeline Specification Card
         render_html("""
@@ -653,25 +652,19 @@ def main():
         </div>
         """)
 
-    # Handle Upload or Sample Loading Trigger
+    # Handle Upload Trigger (Auto-ingests on new file attachment or when Process is clicked)
     target_stream = None
     target_name = None
 
-    if load_sample_attacks and os.path.exists(SAMPLE_INCIDENT_FILE):
-        target_stream = SAMPLE_INCIDENT_FILE
-        target_name = os.path.basename(SAMPLE_INCIDENT_FILE)
-    elif load_sample_packets and os.path.exists(SAMPLE_PACKET_FILE):
-        target_stream = SAMPLE_PACKET_FILE
-        target_name = "user_test_input.csv"
-    elif load_sample_flow and os.path.exists(SAMPLE_FLOW_FILE):
-        target_stream = SAMPLE_FLOW_FILE
-        target_name = "sample_traffic.csv"
+    if uploaded_file is not None:
+        file_signature = f"{uploaded_file.name}_{uploaded_file.size}_{row_limit}"
+        if analyze_button or st.session_state.get("processed_file_id") != file_signature:
+            target_stream = uploaded_file
+            target_name = uploaded_file.name
+            st.session_state["processed_file_id"] = file_signature
     elif analyze_button:
-        if uploaded_file is None:
-            st.warning("Please upload a CSV file or click one of the quick dataset options.")
-            st.stop()
-        target_stream = uploaded_file
-        target_name = uploaded_file.name
+        st.warning("Please upload a CSV file first.")
+        st.stop()
 
     if target_stream is not None:
         try:
@@ -776,10 +769,11 @@ def main():
     # ==============================================================================
     # View Navigation Tabs
     # ==============================================================================
-    tab_analytics, tab_logs, tab_history = st.tabs([
+    tab_analytics, tab_logs, tab_history, tab_manual = st.tabs([
         "Threat & Telemetry Analytics",
         "Record Logs & Export",
-        f"Ingestion History ({len(history)})"
+        f"Ingestion History ({len(history)})",
+        "Attack Types Manual"
     ])
 
     # ------------------------------------------------------------------------------
@@ -796,8 +790,9 @@ def main():
                 </svg>
                 <div class="empty-state-title">No Security Data Ingested</div>
                 <div class="empty-state-text">
-                    Upload any network traffic log, flow dataset (CIC-IDS), or cybersecurity incidents CSV in the sidebar, or click one of the 
-                    quick dataset buttons to populate live telemetry and analytics.
+                    Upload any network traffic log, flow dataset (CIC-IDS), or cybersecurity incidents CSV 
+                    using the sidebar file uploader, then click Process & Ingest to populate live telemetry and analytics.
+                    See the Attack Types Manual tab for supported attack categories.
                 </div>
             </div>
             """)
@@ -1379,6 +1374,152 @@ def main():
                         st.rerun()
 
                 render_html("<hr style='border-color: #f1f5f9; margin: 6px 0;'>")
+
+    # ------------------------------------------------------------------------------
+    # Tab 4: Attack Types Manual
+    # ------------------------------------------------------------------------------
+    with tab_manual:
+        render_html("<div style='font-size: 12px; font-weight: 700; letter-spacing: 0.05em; color: #64748b; text-transform: uppercase; margin: 10px 0;'>NETWORK ATTACK TYPES REFERENCE GUIDE</div>")
+        render_html("""
+        <div style="background-color: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; padding: 12px 16px; margin-bottom: 16px; font-size: 12px; color: #1e40af;">
+            This reference guide describes common network attack categories detected by the Netshield engine.
+            Upload a CSV dataset matching any of the supported schemas to run anomaly detection.
+        </div>
+        """)
+
+        # NSL-KDD Attack Categories
+        render_html("<div style='font-size: 13px; font-weight: 700; color: #0f172a; margin: 16px 0 8px 0;'>NSL-KDD Attack Categories (Packet-Level)</div>")
+
+        manual_col1, manual_col2 = st.columns(2)
+        with manual_col1:
+            render_html("""
+            <div class="netshield-card">
+                <div style="font-size: 12px; font-weight: 700; color: #dc2626; margin-bottom: 6px;">DoS (Denial of Service)</div>
+                <div style="font-size: 11px; color: #334155; line-height: 1.6;">
+                    Overwhelms a target system with excessive traffic or requests to make it unavailable to legitimate users.
+                </div>
+                <div style="font-size: 11px; color: #64748b; margin-top: 6px;"><strong>Examples:</strong> neptune, smurf, back, teardrop, pod, land</div>
+            </div>
+            """)
+            render_html("""
+            <div class="netshield-card">
+                <div style="font-size: 12px; font-weight: 700; color: #f59e0b; margin-bottom: 6px;">Probe (Reconnaissance)</div>
+                <div style="font-size: 11px; color: #334155; line-height: 1.6;">
+                    Scans and gathers information about target systems to identify vulnerabilities and open services.
+                </div>
+                <div style="font-size: 11px; color: #64748b; margin-top: 6px;"><strong>Examples:</strong> satan, ipsweep, portsweep, nmap</div>
+            </div>
+            """)
+
+        with manual_col2:
+            render_html("""
+            <div class="netshield-card">
+                <div style="font-size: 12px; font-weight: 700; color: #8b5cf6; margin-bottom: 6px;">R2L (Remote to Local)</div>
+                <div style="font-size: 11px; color: #334155; line-height: 1.6;">
+                    Unauthorized access from a remote machine to a local account by exploiting vulnerabilities or guessing credentials.
+                </div>
+                <div style="font-size: 11px; color: #64748b; margin-top: 6px;"><strong>Examples:</strong> warezclient, guess_passwd, ftp_write, imap, spy, multihop</div>
+            </div>
+            """)
+            render_html("""
+            <div class="netshield-card">
+                <div style="font-size: 12px; font-weight: 700; color: #059669; margin-bottom: 6px;">U2R (User to Root)</div>
+                <div style="font-size: 11px; color: #334155; line-height: 1.6;">
+                    Privilege escalation where a normal user account gains root/admin access through exploits.
+                </div>
+                <div style="font-size: 11px; color: #64748b; margin-top: 6px;"><strong>Examples:</strong> buffer_overflow, rootkit, perl, loadmodule</div>
+            </div>
+            """)
+
+        # CIC-IDS / Flow-Level Attacks
+        render_html("<div style='font-size: 13px; font-weight: 700; color: #0f172a; margin: 20px 0 8px 0;'>CIC-IDS Flow-Level Attack Types</div>")
+
+        flow_col1, flow_col2, flow_col3 = st.columns(3)
+        with flow_col1:
+            render_html("""
+            <div class="netshield-card">
+                <div style="font-size: 12px; font-weight: 700; color: #dc2626; margin-bottom: 4px;">DDoS</div>
+                <div style="font-size: 11px; color: #334155; line-height: 1.5;">Distributed Denial of Service floods targets from many sources simultaneously.</div>
+            </div>
+            """)
+            render_html("""
+            <div class="netshield-card">
+                <div style="font-size: 12px; font-weight: 700; color: #2563eb; margin-bottom: 4px;">PortScan</div>
+                <div style="font-size: 11px; color: #334155; line-height: 1.5;">Systematic scanning of a host to discover open ports and running services.</div>
+            </div>
+            """)
+
+        with flow_col2:
+            render_html("""
+            <div class="netshield-card">
+                <div style="font-size: 12px; font-weight: 700; color: #ef4444; margin-bottom: 4px;">Brute Force</div>
+                <div style="font-size: 11px; color: #334155; line-height: 1.5;">Repeated login attempts using many password combinations to gain access.</div>
+            </div>
+            """)
+            render_html("""
+            <div class="netshield-card">
+                <div style="font-size: 12px; font-weight: 700; color: #f59e0b; margin-bottom: 4px;">Botnet</div>
+                <div style="font-size: 11px; color: #334155; line-height: 1.5;">Network of compromised devices controlled remotely to perform coordinated attacks.</div>
+            </div>
+            """)
+
+        with flow_col3:
+            render_html("""
+            <div class="netshield-card">
+                <div style="font-size: 12px; font-weight: 700; color: #8b5cf6; margin-bottom: 4px;">Web Attack</div>
+                <div style="font-size: 11px; color: #334155; line-height: 1.5;">SQL Injection, XSS, and brute-force attacks targeting web applications.</div>
+            </div>
+            """)
+            render_html("""
+            <div class="netshield-card">
+                <div style="font-size: 12px; font-weight: 700; color: #059669; margin-bottom: 4px;">Heartbleed</div>
+                <div style="font-size: 11px; color: #334155; line-height: 1.5;">Exploits OpenSSL vulnerability to read server memory and steal sensitive data.</div>
+            </div>
+            """)
+
+        # Global Cyber Threat Incident Types
+        render_html("<div style='font-size: 13px; font-weight: 700; color: #0f172a; margin: 20px 0 8px 0;'>Global Cyber Threat Incident Types</div>")
+
+        inc_col1, inc_col2 = st.columns(2)
+        with inc_col1:
+            render_html("""
+            <div class="netshield-card">
+                <div style="font-size: 12px; font-weight: 700; color: #dc2626; margin-bottom: 4px;">Malware</div>
+                <div style="font-size: 11px; color: #334155; line-height: 1.5;">Malicious software including viruses, trojans, worms, and spyware designed to damage or exploit systems.</div>
+            </div>
+            """)
+            render_html("""
+            <div class="netshield-card">
+                <div style="font-size: 12px; font-weight: 700; color: #ef4444; margin-bottom: 4px;">Ransomware</div>
+                <div style="font-size: 11px; color: #334155; line-height: 1.5;">Encrypts victim data and demands payment for decryption keys. Can paralyze organizations.</div>
+            </div>
+            """)
+            render_html("""
+            <div class="netshield-card">
+                <div style="font-size: 12px; font-weight: 700; color: #2563eb; margin-bottom: 4px;">SQL Injection</div>
+                <div style="font-size: 11px; color: #334155; line-height: 1.5;">Inserts malicious SQL statements into input fields to manipulate or extract database information.</div>
+            </div>
+            """)
+
+        with inc_col2:
+            render_html("""
+            <div class="netshield-card">
+                <div style="font-size: 12px; font-weight: 700; color: #f59e0b; margin-bottom: 4px;">Phishing</div>
+                <div style="font-size: 11px; color: #334155; line-height: 1.5;">Social engineering attack using fraudulent emails or websites to steal credentials and sensitive data.</div>
+            </div>
+            """)
+            render_html("""
+            <div class="netshield-card">
+                <div style="font-size: 12px; font-weight: 700; color: #8b5cf6; margin-bottom: 4px;">Man-in-the-Middle</div>
+                <div style="font-size: 11px; color: #334155; line-height: 1.5;">Intercepting communication between two parties to eavesdrop or alter transmitted data.</div>
+            </div>
+            """)
+            render_html("""
+            <div class="netshield-card">
+                <div style="font-size: 12px; font-weight: 700; color: #059669; margin-bottom: 4px;">Zero-Day Exploit</div>
+                <div style="font-size: 11px; color: #334155; line-height: 1.5;">Attacks targeting previously unknown software vulnerabilities before patches are available.</div>
+            </div>
+            """)
 
 if __name__ == "__main__":
     main()
