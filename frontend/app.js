@@ -72,7 +72,42 @@ function handleFileSelection(file) {
   readCSVFile(file);
 }
 
-// File Drag & Drop
+const centerFileInput = document.getElementById('centerFileInput');
+
+// Central Dropzone Event Handlers (User can click or drag & drop directly on the main central card)
+if (emptyState) {
+  emptyState.addEventListener('click', () => {
+    if (centerFileInput) centerFileInput.click();
+    else if (fileInput) fileInput.click();
+  });
+  emptyState.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    emptyState.style.borderColor = '#2563eb';
+    emptyState.style.backgroundColor = '#eff6ff';
+  });
+  emptyState.addEventListener('dragleave', () => {
+    emptyState.style.borderColor = '#cbd5e1';
+    emptyState.style.backgroundColor = '#ffffff';
+  });
+  emptyState.addEventListener('drop', (e) => {
+    e.preventDefault();
+    emptyState.style.borderColor = '#cbd5e1';
+    emptyState.style.backgroundColor = '#ffffff';
+    if (e.dataTransfer && e.dataTransfer.files.length > 0) {
+      handleFileSelection(e.dataTransfer.files[0]);
+    }
+  });
+}
+
+if (centerFileInput) {
+  centerFileInput.addEventListener('change', (e) => {
+    if (e.target.files && e.target.files.length > 0) {
+      handleFileSelection(e.target.files[0]);
+    }
+  });
+}
+
+// File Drag & Drop (Sidebar)
 if (dropzone) {
   dropzone.addEventListener('click', () => fileInput.click());
   dropzone.addEventListener('dragover', (e) => {

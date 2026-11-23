@@ -549,6 +549,85 @@ def process_flow_telemetry(df_raw):
     inference_time = time.time() - start_time
     return result_df, attack_types, inference_time
 
+def ingest_and_process_stream(stream, filename, row_limit, model, encoders, scaler):
+    """Unified ingestion and telemetry detection processor."""
+    try:
+        nrows = None if row_limit == "All Records" else int(row_limit)
+        raw_df = parse_any_csv(stream, nrows=nrows)
+
+        if len(raw_df) == 0:
+            st.error("Uploaded CSV contains no valid data rows.")
+            return False
+
+        schema = detect_dataset_schema(raw_df)
+        start_t = time.time()
+
+        if schema == "PACKET":
+            if model is None or encoders is None or scaler is None:
+                st.error("Anomaly detection ML model is not loaded. Check model files.")
+                return False
+            results, gt, elapsed = predict_packet_anomalies(raw_df, model, encoders, scaler)
+            try:
+                st.session_state["data_mode"] = "PACKET"
+                st.session_state["dataset_records"] = results
+                st.session_state["ground_truth"] = gt
+                st.session_state["inference_time"] = elapsed
+                st.session_state["source_name"] = filename
+                if "ingestion_history" in st.session_state:
+                    st.session_state["ingestion_history"].insert(0, history_entry)
+            except Exception:
+                pass
+            return True
+
+        elif schema == "FLOW":
+            results, attack_types, elapsed = process_flow_telemetry(raw_df)
+            try:
+                st.session_state["data_mode"] = "FLOW"
+                st.session_state["dataset_records"] = results
+                st.session_state["ground_truth"] = None
+                st.session_state["inference_time"] = elapsed
+                st.session_state["source_name"] = filename
+                if "ingestion_history" in st.session_state:
+                    st.session_state["ingestion_history"].insert(0, history_entry)
+            except Exception:
+                pass
+            return True
+
+        else:
+            # INCIDENT Pipeline: Clean and parse incident telemetry
+            elapsed = time.time() - start_t
+            anomaly_count = len(raw_df)
+
+            # Record History
+            history_entry = {
+                "entry_id": "ING-001",
+                "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "filename": filename,
+                "pipeline_type": "Threat & Incident Intelligence",
+                "total_records": len(raw_df),
+                "summary": f"{len(raw_df):,} Threat Events",
+                "latency_ms": elapsed * 1000,
+                "data_mode": "INCIDENT",
+                "data_df": raw_df,
+                "ground_truth": None
+            }
+            try:
+                if "ingestion_history" in st.session_state:
+                    history_entry["entry_id"] = f"ING-{len(st.session_state['ingestion_history'])+1:03d}"
+                    st.session_state["ingestion_history"].insert(0, history_entry)
+                st.session_state["data_mode"] = "INCIDENT"
+                st.session_state["dataset_records"] = raw_df
+                st.session_state["ground_truth"] = None
+                st.session_state["inference_time"] = elapsed
+                st.session_state["source_name"] = filename
+            except Exception:
+                pass
+            return True
+
+    except Exception as ex:
+        st.error(f"Processing failed: {str(ex)}")
+        return False
+
 # ==============================================================================
 # Main Application Logic
 # ==============================================================================
@@ -653,9 +732,6 @@ def main():
         """)
 
     # Handle Upload Trigger (Auto-ingests on new file attachment or when Process is clicked)
-    target_stream = None
-    target_name = None
-
     if uploaded_file is not None:
         file_signature = f"{uploaded_file.name}_{uploaded_file.size}_{row_limit}"
         need_processing = (
@@ -665,104 +741,12 @@ def main():
             st.session_state.get("processed_file_id") != file_signature
         )
         if need_processing:
-            target_stream = uploaded_file
-            target_name = uploaded_file.name
             st.session_state["processed_file_id"] = file_signature
+            with st.spinner("Analyzing dataset structure and running telemetry processing..."):
+                if ingest_and_process_stream(uploaded_file, uploaded_file.name, row_limit, model, encoders, scaler):
+                    st.rerun()
     elif analyze_button:
         st.warning("Please upload a CSV file first.")
-        st.stop()
-
-    if target_stream is not None:
-        try:
-            with st.spinner("Analyzing dataset structure and running telemetry processing..."):
-                nrows = None if row_limit == "All Records" else int(row_limit)
-                raw_df = parse_any_csv(target_stream, nrows=nrows)
-
-                if len(raw_df) == 0:
-                    st.error("Uploaded CSV contains no valid data rows.")
-                    st.stop()
-
-                schema = detect_dataset_schema(raw_df)
-                start_t = time.time()
-
-                if schema == "PACKET":
-                    if model is None or encoders is None or scaler is None:
-                        st.error("Anomaly detection ML model is not loaded. Check model files.")
-                        st.stop()
-                    results, gt, elapsed = predict_packet_anomalies(raw_df, model, encoders, scaler)
-                    st.session_state["data_mode"] = "PACKET"
-                    st.session_state["dataset_records"] = results
-                    st.session_state["ground_truth"] = gt
-                    st.session_state["inference_time"] = elapsed
-                    st.session_state["source_name"] = target_name
-
-                    # Record History
-                    anomaly_count = int((results["prediction"] == 1).sum())
-                    history_entry = {
-                        "entry_id": f"ING-{len(st.session_state['ingestion_history'])+1:03d}",
-                        "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                        "filename": target_name,
-                        "pipeline_type": "Packet-Level Network Telemetry",
-                        "total_records": len(results),
-                        "summary": f"{anomaly_count} Anomalies ({(anomaly_count/len(results)*100):.1f}%)",
-                        "latency_ms": elapsed * 1000,
-                        "data_mode": "PACKET",
-                        "data_df": results,
-                        "ground_truth": gt
-                    }
-                    st.session_state["ingestion_history"].insert(0, history_entry)
-
-                elif schema == "FLOW":
-                    results, attack_types, elapsed = process_flow_telemetry(raw_df)
-                    st.session_state["data_mode"] = "FLOW"
-                    st.session_state["dataset_records"] = results
-                    st.session_state["ground_truth"] = None
-                    st.session_state["inference_time"] = elapsed
-                    st.session_state["source_name"] = target_name
-
-                    # Record History
-                    anomaly_count = int((results["prediction"] == 1).sum())
-                    history_entry = {
-                        "entry_id": f"ING-{len(st.session_state['ingestion_history'])+1:03d}",
-                        "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                        "filename": target_name,
-                        "pipeline_type": "Network Flow Telemetry",
-                        "total_records": len(results),
-                        "summary": f"{anomaly_count} Anomalies ({(anomaly_count/len(results)*100):.1f}%)",
-                        "latency_ms": elapsed * 1000,
-                        "data_mode": "FLOW",
-                        "data_df": results,
-                        "ground_truth": None
-                    }
-                    st.session_state["ingestion_history"].insert(0, history_entry)
-
-                else:
-                    # INCIDENT Pipeline: Clean and parse incident telemetry
-                    elapsed = time.time() - start_t
-                    st.session_state["data_mode"] = "INCIDENT"
-                    st.session_state["dataset_records"] = raw_df
-                    st.session_state["ground_truth"] = None
-                    st.session_state["inference_time"] = elapsed
-                    st.session_state["source_name"] = target_name
-
-                    # Record History
-                    history_entry = {
-                        "entry_id": f"ING-{len(st.session_state['ingestion_history'])+1:03d}",
-                        "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                        "filename": target_name,
-                        "pipeline_type": "Threat & Incident Intelligence",
-                        "total_records": len(raw_df),
-                        "summary": f"{len(raw_df):,} Threat Events",
-                        "latency_ms": elapsed * 1000,
-                        "data_mode": "INCIDENT",
-                        "data_df": raw_df,
-                        "ground_truth": None
-                    }
-                    st.session_state["ingestion_history"].insert(0, history_entry)
-
-        except Exception as ex:
-            st.error(f"Processing failed: {str(ex)}")
-            st.stop()
 
     # Active State
     data_mode = st.session_state["data_mode"]
@@ -787,38 +771,32 @@ def main():
     # ------------------------------------------------------------------------------
     with tab_analytics:
         if records is None:
-            if uploaded_file is not None:
-                render_html(f"""
-                <div class="empty-state-box">
-                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="margin: 0 auto;">
-                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                        <polyline points="14 2 14 8 20 8"/>
-                        <line x1="16" y1="13" x2="8" y2="13"/>
-                        <line x1="16" y1="17" x2="8" y2="17"/>
-                        <polyline points="10 9 9 9 8 9"/>
-                    </svg>
-                    <div class="empty-state-title" style="color: #1e40af;">File Attached: {uploaded_file.name}</div>
-                    <div class="empty-state-text">
-                        File ready ({uploaded_file.size / 1024:.1f} KB). Click <strong>Process &amp; Ingest</strong> in the sidebar to run analysis.
-                    </div>
+            render_html("""
+            <div style="background-color: #f8fafc; border: 2px dashed #3b82f6; border-radius: 8px; padding: 36px 20px; text-align: center; margin: 12px 0 18px 0;">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="margin: 0 auto 12px auto;">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="17 8 12 3 7 8"/>
+                    <line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
+                <div style="font-size: 17px; font-weight: 700; color: #0f172a; margin-bottom: 4px;">Upload &amp; Analyze Network Telemetry Dataset</div>
+                <div style="font-size: 13px; color: #64748b; max-width: 540px; margin: 0 auto;">
+                    Drag and drop or select your CSV file below to run real-time anomaly classification, threat scoring, and visual telemetry.
                 </div>
-                """)
-            else:
-                render_html("""
-                <div class="empty-state-box">
-                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="margin: 0 auto;">
-                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                        <polyline points="17 8 12 3 7 8"/>
-                        <line x1="12" y1="3" x2="12" y2="15"/>
-                    </svg>
-                    <div class="empty-state-title">No Security Data Ingested</div>
-                    <div class="empty-state-text">
-                        Upload any network traffic log, flow telemetry capture, or cybersecurity threat incidents CSV 
-                        using the sidebar file uploader, then click Process & Ingest to populate live telemetry and analytics.
-                        See the Attack Types Manual tab for supported attack categories.
-                    </div>
-                </div>
-                """)
+            </div>
+            """)
+            
+            center_uploaded = st.file_uploader(
+                "Upload or Drop CSV Telemetry Dataset Here",
+                type=["csv"],
+                key="center_telemetry_uploader",
+                help="Attach network traffic captures, flow telemetry, or threat breach logs"
+            )
+            
+            if center_uploaded is not None:
+                with st.spinner("Processing telemetry and executing ML anomaly detection..."):
+                    if ingest_and_process_stream(center_uploaded, center_uploaded.name, row_limit, model, encoders, scaler):
+                        st.session_state["processed_file_id"] = f"{center_uploaded.name}_{center_uploaded.size}_{row_limit}"
+                        st.rerun()
         elif data_mode == "INCIDENT":
             # ==================================================================
             # Render Mode: Cyber Attack Incident & Threat Intelligence

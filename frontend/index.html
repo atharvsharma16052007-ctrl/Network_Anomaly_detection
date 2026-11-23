@@ -108,19 +108,19 @@
 
       <!-- Tab 1: Threat & Telemetry Analytics -->
       <section class="tab-content active" id="tab-analytics">
-        <!-- Empty State -->
-        <div class="empty-state-box" id="emptyState">
-          <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <!-- Empty State (Interactive Central Dropzone) -->
+        <div class="empty-state-box" id="emptyState" style="cursor: pointer; transition: all 0.2s ease;">
+          <input type="file" id="centerFileInput" accept=".csv" style="display: none;" />
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="margin: 0 auto 8px auto;">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
             <polyline points="17 8 12 3 7 8"/>
             <line x1="12" y1="3" x2="12" y2="15"/>
           </svg>
-          <div class="empty-state-title">No Security Data Ingested</div>
-          <div class="empty-state-text">
-            Upload any network traffic log, flow telemetry capture, or cybersecurity threat incidents CSV 
-            using the sidebar file uploader, then click Process &amp; Ingest to populate live telemetry and analytics.
-            See the Attack Types Manual tab for supported attack categories.
+          <div class="empty-state-title" id="centerBoxTitle" style="font-size: 17px; font-weight: 700; color: #0f172a;">Click or Drag &amp; Drop CSV File Here</div>
+          <div class="empty-state-text" id="centerBoxText" style="margin-top: 6px;">
+            Upload any network traffic capture, flow telemetry, or threat breach log CSV directly here to inspect records and run ML anomaly detection.
           </div>
+          <button class="btn btn-primary" id="btnCenterBrowse" style="margin-top: 14px; pointer-events: none;">Browse CSV File</button>
         </div>
 
         <!-- Populated Telemetry View -->
