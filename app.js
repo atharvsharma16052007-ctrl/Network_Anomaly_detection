@@ -207,7 +207,7 @@ function processDataset(data, fileName) {
     id: `ING-${String(ingestionHistory.length + 1).padStart(3, '0')}`,
     time: new Date().toLocaleTimeString(),
     fileName: fileName,
-    schema: schema,
+    schema: schema === 'INCIDENT' ? 'Threat Incident Intelligence' : (schema === 'FLOW' ? 'Network Flow Telemetry' : 'Packet-Level Network Telemetry'),
     records: processedRows.length,
     summary: schema === 'INCIDENT' ? `${processedRows.length.toLocaleString()} Threat Events` : `${anomalyCount} Anomalies (${(anomalyCount/processedRows.length*100).toFixed(1)}%)`,
     latency: durationMs.toFixed(1)
@@ -229,11 +229,11 @@ function processDataset(data, fileName) {
 function renderBanner(schema, fileName, total) {
   pipelineBanner.className = 'pipeline-banner ' + (schema === 'INCIDENT' ? 'banner-incident' : 'banner-packet');
   if (schema === 'INCIDENT') {
-    pipelineTitle.textContent = 'ACTIVE PIPELINE: CYBERSECURITY INCIDENT INTELLIGENCE';
+    pipelineTitle.textContent = 'ACTIVE PIPELINE: CYBER THREAT INCIDENT & BREACH TELEMETRY';
   } else if (schema === 'FLOW') {
-    pipelineTitle.textContent = 'ACTIVE PIPELINE: CIC-IDS NETWORK FLOW ANALYZER';
+    pipelineTitle.textContent = 'ACTIVE PIPELINE: NETWORK FLOW TELEMETRY & TRAFFIC ANALYZER';
   } else {
-    pipelineTitle.textContent = 'ACTIVE PIPELINE: NSL-KDD RANDOM FOREST MODEL';
+    pipelineTitle.textContent = 'ACTIVE PIPELINE: DEEP PACKET ANOMALY DETECTION ENGINE';
   }
   pipelineMeta.textContent = `Source: ${fileName} | Records: ${total.toLocaleString()}`;
 }
