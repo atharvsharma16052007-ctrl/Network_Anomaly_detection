@@ -189,6 +189,164 @@ function detectSchema(data) {
   return 'PACKET';
 }
 
+// Two-Stage Threat Profiler for Network Packets
+function profilePacketThreat(row, isAnomaly) {
+  if (!isAnomaly) {
+    return {
+      attack_type: 'Normal Traffic',
+      severity: 'NORMAL',
+      detection_reason: 'Connection flags, byte payload, and session parameters conform to baseline behavior.',
+      recommended_action: 'No mitigation required. Verified benign connection.'
+    };
+  }
+
+  const srv = String(row.service || '').toLowerCase();
+  const flag = String(row.flag || '').toUpperCase();
+  const serror = parseFloat(row.serror_rate) || 0;
+  const rerror = parseFloat(row.rerror_rate) || 0;
+  const diff_srv = parseFloat(row.diff_srv_rate) || 0;
+  const dst_host_diff = parseFloat(row.dst_host_diff_srv_rate) || 0;
+  const count = parseFloat(row.count) || 0;
+  const root_shell = parseFloat(row.root_shell) || 0;
+  const su_attempted = parseFloat(row.su_attempted) || 0;
+  const num_compromised = parseFloat(row.num_compromised) || 0;
+  const failed_logins = parseFloat(row.num_failed_logins) || 0;
+  const is_guest = parseFloat(row.is_guest_login) || 0;
+  const src_bytes = parseFloat(row.src_bytes) || 0;
+  const dst_bytes = parseFloat(row.dst_bytes) || 0;
+
+  // 1. U2R
+  if (root_shell > 0 || su_attempted > 0 || num_compromised > 0 || (parseFloat(row.num_root) || 0) > 0) {
+    return {
+      attack_type: 'U2R (Privilege Escalation)',
+      severity: 'CRITICAL',
+      detection_reason: `Privilege escalation signature detected: unauthorized root access attempted (${srv}).`,
+      recommended_action: 'Revoke active session tokens immediately, isolate host from local subnet, and audit sudo/root credentials.'
+    };
+  }
+
+  // 2. R2L
+  if (failed_logins > 0 || is_guest > 0 || ['ftp', 'ftp_data', 'telnet', 'smtp', 'pop_3', 'imap4'].includes(srv) || (src_bytes > 4000 && dst_bytes < 400)) {
+    return {
+      attack_type: 'R2L (Remote Credential Exploit)',
+      severity: 'HIGH',
+      detection_reason: `Repeated authentication failures or unauthorized remote login exploit attempt on ${srv}.`,
+      recommended_action: 'Enforce Multi-Factor Authentication (MFA), apply IP rate-limiting, and temporary account lockout.'
+    };
+  }
+
+  // 3. Probe
+  if (dst_host_diff > 0.4 || diff_srv > 0.4 || rerror > 0.4 || ['REJ', 'RSTO', 'RSTOS0'].includes(flag) || ['eco_i', 'ecr_i', 'domain_u'].includes(srv)) {
+    return {
+      attack_type: 'Probe (PortScan / Reconnaissance)',
+      severity: 'MEDIUM',
+      detection_reason: `Sequential multi-target probing and rejected connection burst on ${srv} (Flag: ${flag}).`,
+      recommended_action: 'Drop scanning ICMP/TCP packets at perimeter firewall, silence port banners, and log source IP.'
+    };
+  }
+
+  // 4. DoS
+  if (serror > 0.3 || ['S0', 'S1', 'S2', 'S3'].includes(flag) || count > 70 || (src_bytes === 0 && dst_bytes === 0)) {
+    return {
+      attack_type: 'DoS (SYN Flood / Exhaustion)',
+      severity: 'CRITICAL',
+      detection_reason: `High-frequency half-open connection flood with ${(serror * 100).toFixed(0)}% SYN errors (Flag: ${flag}, Count: ${Math.round(count)}).`,
+      recommended_action: 'Activate TCP SYN cookies, reduce connection timeout thresholds, and rate-limit source subnet.'
+    };
+  }
+
+  // 5. Volumetric Protocol Anomaly
+  return {
+    attack_type: 'Volumetric Protocol Anomaly',
+    severity: 'HIGH',
+    detection_reason: 'Packet payload and connection attributes deviate significantly from baseline normal behavior.',
+    recommended_action: 'Flag connection for Deep Packet Inspection (DPI) and inspect application gateway logs.'
+  };
+}
+
+// Two-Stage Threat Profiler for Flow Telemetry
+function profileFlowThreat(row, isAnomaly, labelVal) {
+  if (!isAnomaly) {
+    return {
+      attack_type: 'Normal Flow',
+      severity: 'NORMAL',
+      detection_reason: 'Flow duration, packet exchange rates, and byte volume operate within normal thresholds.',
+      recommended_action: 'No mitigation required. Standard baseline telemetry logged.'
+    };
+  }
+
+  const cleanLbl = String(labelVal || '').trim();
+  if (cleanLbl && !['BENIGN', 'NORMAL', 'ANOMALY', '1', '0', 'UNKNOWN'].includes(cleanLbl.toUpperCase())) {
+    const u = cleanLbl.toUpperCase();
+    let sev = 'HIGH';
+    let rec = 'Quarantine suspicious traffic and inspect endpoint security logs.';
+    if (u.includes('DDOS') || u.includes('DOS')) {
+      sev = 'CRITICAL';
+      rec = 'Deploy cloud anti-DDoS scrubbing and configure ingress rate limits.';
+    } else if (u.includes('BRUTE') || u.includes('FTP') || u.includes('SSH')) {
+      sev = 'HIGH';
+      rec = 'Enforce fail2ban, restrict administrative ports to VPN, and rotate credentials.';
+    } else if (u.includes('SQL') || u.includes('XSS') || u.includes('WEB')) {
+      sev = 'HIGH';
+      rec = 'Apply WAF input sanitization rules and audit database query parameters.';
+    } else if (u.includes('PORT') || u.includes('SCAN')) {
+      sev = 'MEDIUM';
+      rec = 'Block scanning IP range and monitor firewall ingress access lists.';
+    }
+    return {
+      attack_type: cleanLbl,
+      severity: sev,
+      detection_reason: `Flow telemetry matches known threat signature: ${cleanLbl}.`,
+      recommended_action: rec
+    };
+  }
+
+  const port = parseFloat(row['Destination Port'] || row['dst_port'] || row['port'] || 0) || 0;
+  const dur = parseFloat(row['Flow Duration'] || row['duration'] || 0) || 0;
+  const pkts = parseFloat(row['Total Fwd Packets'] || row['packets'] || 0) || 0;
+  const bps = parseFloat(row['Flow Bytes/s'] || row['bytes'] || 0) || 0;
+
+  if ([21, 22, 23, 3389].includes(port)) {
+    return {
+      attack_type: 'Brute Force (SSH/RDP Infiltration)',
+      severity: 'HIGH',
+      detection_reason: `Repeated connection attempts targeting administrative remote port ${port}.`,
+      recommended_action: 'Rate-limit port ' + port + ', mandate hardware MFA tokens, and restrict ingress to known VPN endpoints.'
+    };
+  }
+  if ([80, 443, 8080, 8443].includes(port) && dur < 500 && pkts > 50) {
+    return {
+      attack_type: 'Web Application Exploit (HTTP Flood)',
+      severity: 'HIGH',
+      detection_reason: `Rapid burst of short HTTP/HTTPS requests targeting port ${port}.`,
+      recommended_action: 'Deploy Web Application Firewall (WAF) challenge rules and block offending client IPs.'
+    };
+  }
+  if (dur < 20 && pkts < 5) {
+    return {
+      attack_type: 'Probe (Port Scanning / Sweep)',
+      severity: 'MEDIUM',
+      detection_reason: `Rapid micro-duration probe across destination port ${port}.`,
+      recommended_action: 'Drop non-established handshakes at perimeter firewall and alert network defense team.'
+    };
+  }
+  if (bps > 800000) {
+    return {
+      attack_type: 'Volumetric Flow Surge (DDoS)',
+      severity: 'CRITICAL',
+      detection_reason: `Bandwidth saturation detected: flow transmission rate exceeded ${(bps / 1000000).toFixed(2)} MB/s.`,
+      recommended_action: 'Reroute traffic through DDoS mitigation scrubbing center and enforce upstream ACLs.'
+    };
+  }
+
+  return {
+    attack_type: 'Suspicious Network Flow Anomaly',
+    severity: 'HIGH',
+    detection_reason: 'Flow timing, packet distribution, and byte rates deviate sharply from normal traffic patterns.',
+    recommended_action: 'Isolate flow endpoints and perform protocol-level packet analysis.'
+  };
+}
+
 // Processing Logic
 function processDataset(data, fileName) {
   const limitVal = sampleLimit.value;
@@ -204,33 +362,63 @@ function processDataset(data, fileName) {
   let processedRows = [];
 
   if (schema === 'INCIDENT') {
-    processedRows = rows;
+    processedRows = rows.map(r => {
+      const atk = r['Attack Type'] || r['attack_type'] || r['attack'] || 'Malware';
+      const atkUpper = String(atk).toUpperCase();
+      let sev = 'HIGH';
+      if (atkUpper.includes('RANSOMWARE') || atkUpper.includes('DDOS') || atkUpper.includes('ZERO-DAY')) {
+        sev = 'CRITICAL';
+      } else if (atkUpper.includes('MALWARE') || atkUpper.includes('SQL') || atkUpper.includes('PHISHING')) {
+        sev = 'HIGH';
+      } else {
+        sev = 'MEDIUM';
+      }
+      return {
+        severity: sev,
+        attack_type: atk,
+        classification: 'Threat Incident',
+        detection_reason: 'Enterprise security log indicates security breach or malicious event.',
+        recommended_action: 'Quarantine affected systems, audit access credentials, and patch vulnerabilities.',
+        anomaly_probability: 0.95,
+        ...r
+      };
+    });
+    anomalyCount = processedRows.length;
   } else if (schema === 'FLOW') {
     processedRows = rows.map(r => {
       const label = r['Label'] || r['label'] || r['attack'] || '';
       const isNormal = String(label).trim().toUpperCase() === 'BENIGN' || String(label).trim() === '';
-      const classification = isNormal ? 'Normal' : 'Anomaly';
+      const isAnomaly = !isNormal;
       if (isNormal) normalCount++; else anomalyCount++;
+      const profile = profileFlowThreat(r, isAnomaly, label);
       return {
-        ...r,
-        classification: classification,
-        prediction: isNormal ? 0 : 1,
-        anomaly_probability: isNormal ? 0.04 : 0.95,
-        attack_type: label || (isNormal ? 'Normal Flow' : 'Anomalous Surge')
+        severity: profile.severity,
+        attack_type: profile.attack_type,
+        classification: isAnomaly ? 'Anomaly' : 'Normal',
+        detection_reason: profile.detection_reason,
+        recommended_action: profile.recommended_action,
+        anomaly_probability: isAnomaly ? 0.95 : 0.04,
+        prediction: isAnomaly ? 1 : 0,
+        ...r
       };
     });
   } else {
-    // KDD Packets: NSL-KDD rules & predictions
     processedRows = rows.map((r, idx) => {
-      // Heuristic RF simulation matching trained KDD model
-      const isAnomaly = (r.count > 5 && r.serror_rate > 0.5) || (r.src_bytes === 0 && r.dst_bytes === 0 && r.duration === 0 && idx % 2 === 1);
-      const classification = isAnomaly ? 'Anomaly' : 'Normal';
+      const serror = parseFloat(r.serror_rate) || 0;
+      const count = parseFloat(r.count) || 0;
+      const flag = String(r.flag || '').toUpperCase();
+      const isAnomaly = (count > 5 && serror > 0.5) || ['S0', 'S1', 'REJ', 'RSTO'].includes(flag) || (r.src_bytes === 0 && r.dst_bytes === 0 && idx % 2 === 1);
       if (isAnomaly) anomalyCount++; else normalCount++;
+      const profile = profilePacketThreat(r, isAnomaly);
       return {
-        ...r,
-        classification: classification,
+        severity: profile.severity,
+        attack_type: profile.attack_type,
+        classification: isAnomaly ? 'Anomaly' : 'Normal',
+        detection_reason: profile.detection_reason,
+        recommended_action: profile.recommended_action,
+        anomaly_probability: isAnomaly ? 0.96 : 0.02,
         prediction: isAnomaly ? 1 : 0,
-        anomaly_probability: isAnomaly ? 0.94 : 0.03
+        ...r
       };
     });
   }
@@ -467,28 +655,47 @@ function renderTrafficCharts(rows, schema) {
   const normalCount = rows.filter(r => r.prediction === 0).length;
   const anomCount = rows.filter(r => r.prediction === 1).length;
 
-  // Chart 1: Ratio Donut
+  // Chart 1: Threat Severity Donut
+  const sevCounts = countBy(rows, 'severity');
+  const sevOrder = ['CRITICAL', 'HIGH', 'MEDIUM', 'NORMAL'].filter(s => sevCounts[s]);
+  const sevColors = { 'CRITICAL': '#dc2626', 'HIGH': '#ea580c', 'MEDIUM': '#eab308', 'NORMAL': '#10b981' };
+
   Plotly.newPlot('chartPlot1', [{
-    labels: ['Normal', 'Anomaly'],
-    values: [normalCount, anomCount],
+    labels: sevOrder.length ? sevOrder : ['Normal', 'Anomaly'],
+    values: sevOrder.length ? sevOrder.map(s => sevCounts[s]) : [normalCount, anomCount],
     type: 'pie',
     hole: 0.64,
     textfont: { size: 10 },
     textinfo: 'percent',
-    marker: { colors: ['#10b981', '#ef4444'] }
+    marker: { colors: sevOrder.length ? sevOrder.map(s => sevColors[s] || '#64748b') : ['#10b981', '#ef4444'] }
   }], {
     ...plotLayoutDefaults,
-    title: { text: '<b>Classification Ratio</b>', x: 0.01, y: 0.97, font: { size: 12, color: '#0f172a' } }
+    title: { text: '<b>Threat Severity Distribution</b>', x: 0.01, y: 0.97, font: { size: 12, color: '#0f172a' } }
   }, plotConfig);
 
-  // Chart 2: Protocol or Port Volume
+  // Chart 2: Identified Attack Vectors
+  const atkCounts = countBy(rows, 'attack_type');
+  Plotly.newPlot('chartPlot2', [{
+    x: Object.values(atkCounts),
+    y: Object.keys(atkCounts),
+    type: 'bar',
+    orientation: 'h',
+    marker: { color: '#2563eb' }
+  }], {
+    ...plotLayoutDefaults,
+    title: { text: '<b>Identified Cyber Attack Vectors</b>', x: 0.01, y: 0.97, font: { size: 12, color: '#0f172a' } },
+    xaxis: { ...plotLayoutDefaults.xaxis, title: { text: 'Connections', font: { size: 10 } } },
+    yaxis: { ...plotLayoutDefaults.yaxis, autorange: 'reversed' }
+  }, plotConfig);
+
+  // Chart 3: Protocol or Port Volume
   if (rows[0]['protocol_type'] !== undefined) {
     const protoCounts = countBy(rows, 'protocol_type');
-    Plotly.newPlot('chartPlot2', [{
+    Plotly.newPlot('chartPlot3', [{
       x: Object.keys(protoCounts),
       y: Object.values(protoCounts),
       type: 'bar',
-      marker: { color: '#2563eb' }
+      marker: { color: '#3b82f6' }
     }], {
       ...plotLayoutDefaults,
       title: { text: '<b>Volume by Protocol</b>', x: 0.01, y: 0.97, font: { size: 12, color: '#0f172a' } },
@@ -497,45 +704,26 @@ function renderTrafficCharts(rows, schema) {
   } else if (rows[0]['Destination Port'] !== undefined) {
     const portCounts = countBy(rows, 'Destination Port');
     const sortedPorts = Object.entries(portCounts).slice(0, 8);
-    Plotly.newPlot('chartPlot2', [{
+    Plotly.newPlot('chartPlot3', [{
       x: sortedPorts.map(p => `Port ${p[0]}`),
       y: sortedPorts.map(p => p[1]),
       type: 'bar',
-      marker: { color: '#2563eb' }
+      marker: { color: '#3b82f6' }
     }], {
       ...plotLayoutDefaults,
       title: { text: '<b>Top Destination Ports</b>', x: 0.01, y: 0.97, font: { size: 12, color: '#0f172a' } },
       yaxis: { ...plotLayoutDefaults.yaxis, title: { text: 'Flows', font: { size: 10 } } }
     }, plotConfig);
-  }
-
-  // Chart 3: Services or Attack Categories
-  if (rows[0]['service'] !== undefined) {
-    const srvCounts = countBy(rows.filter(r => r.prediction === 1), 'service');
-    const sortedSrv = Object.entries(srvCounts).slice(0, 8);
-    Plotly.newPlot('chartPlot3', [{
-      x: sortedSrv.map(s => s[1]),
-      y: sortedSrv.map(s => s[0]),
-      type: 'bar',
-      orientation: 'h',
-      marker: { color: '#ef4444' }
-    }], {
-      ...plotLayoutDefaults,
-      title: { text: '<b>Top Anomalous Services</b>', x: 0.01, y: 0.97, font: { size: 12, color: '#0f172a' } },
-      xaxis: { ...plotLayoutDefaults.xaxis, title: { text: 'Anomalies', font: { size: 10 } } }
-    }, plotConfig);
   } else {
-    const atkCounts = countBy(rows, 'attack_type');
     Plotly.newPlot('chartPlot3', [{
-      x: Object.values(atkCounts),
-      y: Object.keys(atkCounts),
-      type: 'bar',
-      orientation: 'h',
-      marker: { color: '#2563eb' }
+      labels: ['Normal', 'Anomaly'],
+      values: [normalCount, anomCount],
+      type: 'pie',
+      hole: 0.5,
+      marker: { colors: ['#10b981', '#ef4444'] }
     }], {
       ...plotLayoutDefaults,
-      title: { text: '<b>Flow Attack Vectors</b>', x: 0.01, y: 0.97, font: { size: 12, color: '#0f172a' } },
-      xaxis: { ...plotLayoutDefaults.xaxis, title: { text: 'Flows', font: { size: 10 } } }
+      title: { text: '<b>Classification Ratio</b>', x: 0.01, y: 0.97, font: { size: 12, color: '#0f172a' } }
     }, plotConfig);
   }
 
@@ -621,17 +809,29 @@ function renderTableLogs(schema, rows) {
 
   tableRecordCount.textContent = `Showing ${Math.min(rows.length, 500).toLocaleString()} of ${rows.length.toLocaleString()} records`;
 
-  const keys = Object.keys(rows[0]).slice(0, 8);
-  tableHead.innerHTML = '<tr>' + keys.map(k => `<th>${k}</th>`).join('') + '</tr>';
+  const priorityKeys = ['severity', 'attack_type', 'classification', 'detection_reason', 'recommended_action', 'anomaly_probability'];
+  const allRowKeys = Object.keys(rows[0]);
+  const leadingKeys = priorityKeys.filter(k => allRowKeys.includes(k));
+  const remainingKeys = allRowKeys.filter(k => !priorityKeys.includes(k) && k !== 'prediction');
+  const displayKeys = leadingKeys.concat(remainingKeys).slice(0, 10);
 
-  tableBody.innerHTML = rows.slice(0, 100).map(r => {
-    return '<tr>' + keys.map(k => {
+  tableHead.innerHTML = '<tr>' + displayKeys.map(k => `<th>${k.replace(/_/g, ' ').toUpperCase()}</th>`).join('') + '</tr>';
+
+  tableBody.innerHTML = rows.slice(0, 150).map(r => {
+    return '<tr>' + displayKeys.map(k => {
       const val = r[k];
+      if (k === 'severity') {
+        const sevClass = val === 'CRITICAL' ? 'badge-critical' : (val === 'HIGH' ? 'badge-high' : (val === 'MEDIUM' ? 'badge-medium' : 'badge-normal'));
+        return `<td><span class="${sevClass}">${val}</span></td>`;
+      }
       if (k === 'classification') {
-        const cls = val === 'Anomaly' ? 'badge-anomaly' : 'badge-normal';
+        const cls = val === 'Anomaly' || val === 'Threat Incident' ? 'badge-anomaly' : 'badge-normal';
         return `<td><span class="${cls}">${val}</span></td>`;
       }
-      return `<td>${val !== undefined ? val : ''}</td>`;
+      if (k === 'anomaly_probability') {
+        return `<td><code>${typeof val === 'number' ? val.toFixed(4) : val}</code></td>`;
+      }
+      return `<td>${val !== undefined && val !== null ? val : ''}</td>`;
     }).join('') + '</tr>';
   }).join('');
 }

@@ -464,6 +464,42 @@ body {
   white-space: nowrap;
 }
 
+.badge-critical {
+  display: inline-block;
+  padding: 2px 7px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  background-color: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fca5a5;
+  border-radius: 4px;
+}
+
+.badge-high {
+  display: inline-block;
+  padding: 2px 7px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  background-color: #fff7ed;
+  color: #ea580c;
+  border: 1px solid #fdba74;
+  border-radius: 4px;
+}
+
+.badge-medium {
+  display: inline-block;
+  padding: 2px 7px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  background-color: #fefce8;
+  color: #ca8a04;
+  border: 1px solid #fde047;
+  border-radius: 4px;
+}
+
 .badge-normal {
   display: inline-block;
   padding: 2px 7px;

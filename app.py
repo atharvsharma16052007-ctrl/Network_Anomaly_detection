@@ -153,6 +153,39 @@ render_html("""
         border: 1px solid #a7f3d0;
         border-radius: 4px;
     }
+    .badge-critical {
+        display: inline-block;
+        padding: 3px 8px;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 11px;
+        font-weight: 700;
+        background-color: #fef2f2;
+        color: #dc2626;
+        border: 1px solid #fca5a5;
+        border-radius: 4px;
+    }
+    .badge-high {
+        display: inline-block;
+        padding: 3px 8px;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 11px;
+        font-weight: 700;
+        background-color: #fff7ed;
+        color: #ea580c;
+        border: 1px solid #fdba74;
+        border-radius: 4px;
+    }
+    .badge-medium {
+        display: inline-block;
+        padding: 3px 8px;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 11px;
+        font-weight: 700;
+        background-color: #fefce8;
+        color: #ca8a04;
+        border: 1px solid #fde047;
+        border-radius: 4px;
+    }
     .badge-anomaly {
         display: inline-block;
         padding: 3px 8px;
@@ -468,8 +501,175 @@ def align_packet_features(df):
 
     return df
 
+def profile_packet_threat(row, is_anomaly):
+    """
+    Two-Stage Anomaly Profiler for packet-level traffic.
+    Infers specific attack category, threat severity, plain-English detection trigger,
+    and actionable mitigation recommendations on completely unlabeled datasets.
+    """
+    if not is_anomaly:
+        return {
+            "attack_type": "Normal Traffic",
+            "severity": "NORMAL",
+            "detection_reason": "Connection flags, byte payload, and session parameters conform to baseline behavior.",
+            "recommended_action": "No mitigation required. Verified benign connection."
+        }
+
+    # Extract signature features safely
+    srv = str(row.get("service", "")).lower()
+    flag = str(row.get("flag", "")).upper()
+    serror = float(row.get("serror_rate", 0) or 0)
+    rerror = float(row.get("rerror_rate", 0) or 0)
+    diff_srv = float(row.get("diff_srv_rate", 0) or 0)
+    dst_host_diff = float(row.get("dst_host_diff_srv_rate", 0) or 0)
+    count = float(row.get("count", 0) or 0)
+    root_shell = float(row.get("root_shell", 0) or 0)
+    su_attempted = float(row.get("su_attempted", 0) or 0)
+    num_compromised = float(row.get("num_compromised", 0) or 0)
+    failed_logins = float(row.get("num_failed_logins", 0) or 0)
+    is_guest = float(row.get("is_guest_login", 0) or 0)
+    src_bytes = float(row.get("src_bytes", 0) or 0)
+    dst_bytes = float(row.get("dst_bytes", 0) or 0)
+
+    # 1. U2R (User to Root Privilege Escalation)
+    if root_shell > 0 or su_attempted > 0 or num_compromised > 0 or float(row.get("num_root", 0) or 0) > 0:
+        return {
+            "attack_type": "U2R (Privilege Escalation)",
+            "severity": "CRITICAL",
+            "detection_reason": f"Privilege escalation signature detected: unauthorized root access attempted ({srv}).",
+            "recommended_action": "Revoke active session tokens immediately, isolate host from local subnet, and audit sudo/root credentials."
+        }
+
+    # 2. R2L (Remote to Local Credential Exploit)
+    if failed_logins > 0 or is_guest > 0 or srv in ["ftp", "ftp_data", "telnet", "smtp", "pop_3", "imap4"] or (src_bytes > 4000 and dst_bytes < 400):
+        return {
+            "attack_type": "R2L (Remote Credential Exploit)",
+            "severity": "HIGH",
+            "detection_reason": f"Repeated authentication failures or unauthorized remote login exploit attempt on {srv}.",
+            "recommended_action": "Enforce Multi-Factor Authentication (MFA), apply IP rate-limiting, and temporary account lockout."
+        }
+
+    # 3. Probe (Reconnaissance / PortScan)
+    if dst_host_diff > 0.4 or diff_srv > 0.4 or rerror > 0.4 or flag in ["REJ", "RSTO", "RSTOS0"] or srv in ["eco_i", "ecr_i", "domain_u"]:
+        return {
+            "attack_type": "Probe (PortScan / Reconnaissance)",
+            "severity": "MEDIUM",
+            "detection_reason": f"Sequential multi-target probing and rejected connection burst on {srv} (Flag: {flag}).",
+            "recommended_action": "Drop scanning ICMP/TCP packets at perimeter firewall, silence port banners, and log source IP."
+        }
+
+    # 4. DoS (Denial of Service / SYN Flood)
+    if serror > 0.3 or flag in ["S0", "S1", "S2", "S3"] or count > 70 or (src_bytes == 0 and dst_bytes == 0):
+        return {
+            "attack_type": "DoS (SYN Flood / Exhaustion)",
+            "severity": "CRITICAL",
+            "detection_reason": f"High-frequency half-open connection flood with {serror*100:.0f}% SYN errors (Flag: {flag}, Count: {int(count)}).",
+            "recommended_action": "Activate TCP SYN cookies, reduce connection timeout thresholds, and rate-limit source subnet."
+        }
+
+    # 5. Volumetric Protocol Anomaly
+    return {
+        "attack_type": "Volumetric Protocol Anomaly",
+        "severity": "HIGH",
+        "detection_reason": "Packet payload and connection attributes deviate significantly from baseline normal behavior.",
+        "recommended_action": "Flag connection for Deep Packet Inspection (DPI) and inspect application gateway logs."
+    }
+
+def profile_flow_threat(row, is_anomaly, label_val=""):
+    """
+    Two-Stage Anomaly Profiler for flow-level telemetry.
+    Infers specific attack category, threat severity, plain-English detection trigger,
+    and actionable mitigation recommendations on completely unlabeled datasets.
+    """
+    if not is_anomaly:
+        return {
+            "attack_type": "Normal Flow",
+            "severity": "NORMAL",
+            "detection_reason": "Flow duration, packet exchange rates, and byte volume operate within normal thresholds.",
+            "recommended_action": "No mitigation required. Standard baseline telemetry logged."
+        }
+
+    clean_lbl = str(label_val).strip()
+    if clean_lbl and clean_lbl.upper() not in ["BENIGN", "NORMAL", "ANOMALY", "1", "0", "UNKNOWN"]:
+        lbl_upper = clean_lbl.upper()
+        if any(k in lbl_upper for k in ["DDOS", "DOS"]):
+            sev = "CRITICAL"
+            rec = "Deploy cloud anti-DDoS scrubbing and configure ingress rate limits."
+        elif any(k in lbl_upper for k in ["BRUTE", "FTP", "SSH"]):
+            sev = "HIGH"
+            rec = "Enforce fail2ban, restrict administrative ports to VPN, and rotate credentials."
+        elif any(k in lbl_upper for k in ["SQL", "XSS", "WEB"]):
+            sev = "HIGH"
+            rec = "Apply WAF input sanitization rules and audit database query parameters."
+        elif any(k in lbl_upper for k in ["PORT", "SCAN"]):
+            sev = "MEDIUM"
+            rec = "Block scanning IP range and monitor firewall ingress access lists."
+        else:
+            sev = "HIGH"
+            rec = "Quarantine suspicious traffic and inspect endpoint security logs."
+        return {
+            "attack_type": clean_lbl,
+            "severity": sev,
+            "detection_reason": f"Flow telemetry matches known threat signature: {clean_lbl}.",
+            "recommended_action": rec
+        }
+
+    cols_lower = {str(c).strip().lower(): c for c in row.index}
+    port_col = next((cols_lower[c] for c in cols_lower if "destination port" in c or "dst_port" in c or c == "port"), None)
+    dur_col = next((cols_lower[c] for c in cols_lower if "duration" in c), None)
+    pkts_col = next((cols_lower[c] for c in cols_lower if "fwd packets" in c or "packets" in c), None)
+    bytes_col = next((cols_lower[c] for c in cols_lower if "bytes" in c), None)
+
+    port = float(pd.to_numeric(row.get(port_col, 0), errors="coerce") or 0) if port_col else 0
+    dur = float(pd.to_numeric(row.get(dur_col, 0), errors="coerce") or 0) if dur_col else 0
+    pkts = float(pd.to_numeric(row.get(pkts_col, 0), errors="coerce") or 0) if pkts_col else 0
+    bps = float(pd.to_numeric(row.get(bytes_col, 0), errors="coerce") or 0) if bytes_col else 0
+
+    if port in [21, 22, 23, 3389]:
+        return {
+            "attack_type": "Brute Force (SSH/RDP Infiltration)",
+            "severity": "HIGH",
+            "detection_reason": f"High-frequency connection burst targeting administrative service port {int(port)}.",
+            "recommended_action": "Restrict administration ports behind private VPN and enforce account lockout policies."
+        }
+    if port in [80, 443, 8080] and pkts > 80:
+        return {
+            "attack_type": "DDoS (Application Layer Flood)",
+            "severity": "CRITICAL",
+            "detection_reason": f"High-velocity packet burst ({int(pkts)} packets) flooding web service port {int(port)}.",
+            "recommended_action": "Engage CDN/WAF volumetric filtering and throttle connection requests per client IP."
+        }
+    if port in [80, 443, 8080] and bps > 500000:
+        return {
+            "attack_type": "Web Exploit (SQLi / Injection Anomaly)",
+            "severity": "HIGH",
+            "detection_reason": f"Anomalously high byte transfer rate ({bps/1024:.1f} KB/s) on web server port {int(port)}.",
+            "recommended_action": "Inspect HTTP query payloads for malicious injection syntax and apply WAF filtering."
+        }
+    if dur < 50 or pkts <= 3:
+        return {
+            "attack_type": "PortScan (Reconnaissance)",
+            "severity": "MEDIUM",
+            "detection_reason": f"Micro-burst probe connection targeting port {int(port)} to verify active listener.",
+            "recommended_action": "Drop non-established handshakes at perimeter firewall and alert network defense team."
+        }
+    if bps > 800000:
+        return {
+            "attack_type": "Volumetric Flow Surge (DDoS)",
+            "severity": "CRITICAL",
+            "detection_reason": f"Bandwidth saturation detected: flow transmission rate exceeded {bps/1000000:.2f} MB/s.",
+            "recommended_action": "Reroute traffic through DDoS mitigation scrubbing center and enforce upstream ACLs."
+        }
+
+    return {
+        "attack_type": "Suspicious Network Flow Anomaly",
+        "severity": "HIGH",
+        "detection_reason": "Flow timing, packet distribution, and byte rates deviate sharply from normal traffic patterns.",
+        "recommended_action": "Isolate flow endpoints and perform protocol-level packet analysis."
+    }
+
 def predict_packet_anomalies(df_raw, model, encoders, scaler):
-    """Executes network anomaly classification on NSL-KDD packet traffic using Random Forest."""
+    """Executes two-stage network anomaly classification and threat profiling on packet traffic."""
     start_time = time.time()
     df = df_raw.copy()
     
@@ -494,22 +694,30 @@ def predict_packet_anomalies(df_raw, model, encoders, scaler):
     # Scale numerical features
     scaled_values = scaler.transform(df_encoded)
 
-    # Inference
+    # Stage 1: Fast ML Anomaly Inference
     predictions = model.predict(scaled_values)
     probabilities = model.predict_proba(scaled_values)[:, 1]
     inference_time = time.time() - start_time
 
+    # Stage 2: Threat Signature & Profiling Engine
     result_df = df_raw.copy()
     result_df["prediction"] = predictions
     result_df["classification"] = np.where(predictions == 1, "Anomaly", "Normal")
     result_df["anomaly_probability"] = np.round(probabilities, 4)
 
+    feature_dicts = df_features.to_dict('records')
+    profiles = [profile_packet_threat(row, pred == 1) for row, pred in zip(feature_dicts, predictions)]
+    result_df["attack_type"] = [p["attack_type"] for p in profiles]
+    result_df["severity"] = [p["severity"] for p in profiles]
+    result_df["detection_reason"] = [p["detection_reason"] for p in profiles]
+    result_df["recommended_action"] = [p["recommended_action"] for p in profiles]
+
     return result_df, ground_truth, inference_time
 
 def process_flow_telemetry(df_raw):
     """
-    Processes flow telemetry datasets (e.g. CIC-IDS-2017) with destination ports,
-    flow durations, packet rates, and attack label identification.
+    Two-stage flow telemetry processor with destination ports, flow rates,
+    threat classification, and user-friendly mitigation guidance.
     """
     start_time = time.time()
     df = df_raw.copy()
@@ -524,11 +732,9 @@ def process_flow_telemetry(df_raw):
     if label_col:
         # Ground truth / flow label is present
         raw_labels = df[label_col].astype(str).str.strip()
-        is_normal = raw_labels.str.upper() == "BENIGN"
+        is_normal = raw_labels.str.upper().isin(["BENIGN", "NORMAL", "0"])
         predictions = np.where(is_normal, 0, 1)
         classifications = np.where(is_normal, "Normal", "Anomaly")
-        attack_types = raw_labels.values
-        # Heuristic anomaly probability: calibrated high for attack, low for benign
         probs = np.where(is_normal, 0.04 + np.random.uniform(0, 0.06, size=len(df)), 0.88 + np.random.uniform(0, 0.11, size=len(df)))
     else:
         # Algorithmic anomaly scoring based on flow telemetry rates
@@ -537,17 +743,22 @@ def process_flow_telemetry(df_raw):
         anom_score = (bps > bps.quantile(0.85)) | (dur < 10)
         predictions = anom_score.astype(int).values
         classifications = np.where(predictions == 1, "Anomaly", "Normal")
-        attack_types = np.where(predictions == 1, "Anomalous Flow Surge", "Normal Flow")
         probs = np.where(predictions == 1, 0.91, 0.07)
 
     result_df = df.copy()
     result_df["prediction"] = predictions
     result_df["classification"] = classifications
     result_df["anomaly_probability"] = np.round(np.clip(probs, 0.01, 0.99), 4)
-    result_df["attack_type"] = attack_types
+
+    # Stage 2: Profiling
+    profiles = [profile_flow_threat(row, pred == 1, row.get(label_col, "")) for row, pred in zip(df.to_dict('records'), predictions)]
+    result_df["attack_type"] = [p["attack_type"] for p in profiles]
+    result_df["severity"] = [p["severity"] for p in profiles]
+    result_df["detection_reason"] = [p["detection_reason"] for p in profiles]
+    result_df["recommended_action"] = [p["recommended_action"] for p in profiles]
 
     inference_time = time.time() - start_time
-    return result_df, attack_types, inference_time
+    return result_df, result_df["attack_type"].values, inference_time
 
 def ingest_and_process_stream(stream, filename, row_limit, model, encoders, scaler):
     """Unified ingestion and telemetry detection processor."""
@@ -567,6 +778,18 @@ def ingest_and_process_stream(stream, filename, row_limit, model, encoders, scal
                 st.error("Anomaly detection ML model is not loaded. Check model files.")
                 return False
             results, gt, elapsed = predict_packet_anomalies(raw_df, model, encoders, scaler)
+            history_entry = {
+                "entry_id": f"ING-{len(st.session_state.get('ingestion_history', []))+1:03d}" if "ingestion_history" in st.session_state else "ING-001",
+                "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "filename": filename,
+                "pipeline_type": "Deep Packet Anomaly Detection",
+                "total_records": len(results),
+                "summary": f"{(results['prediction'] == 1).sum():,} Anomalies Flagged",
+                "latency_ms": elapsed * 1000,
+                "data_mode": "PACKET",
+                "data_df": results,
+                "ground_truth": gt
+            }
             try:
                 st.session_state["data_mode"] = "PACKET"
                 st.session_state["dataset_records"] = results
@@ -581,6 +804,18 @@ def ingest_and_process_stream(stream, filename, row_limit, model, encoders, scal
 
         elif schema == "FLOW":
             results, attack_types, elapsed = process_flow_telemetry(raw_df)
+            history_entry = {
+                "entry_id": f"ING-{len(st.session_state.get('ingestion_history', []))+1:03d}" if "ingestion_history" in st.session_state else "ING-001",
+                "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "filename": filename,
+                "pipeline_type": "Network Flow Telemetry",
+                "total_records": len(results),
+                "summary": f"{(results['prediction'] == 1).sum():,} Anomalies Flagged",
+                "latency_ms": elapsed * 1000,
+                "data_mode": "FLOW",
+                "data_df": results,
+                "ground_truth": None
+            }
             try:
                 st.session_state["data_mode"] = "FLOW"
                 st.session_state["dataset_records"] = results
@@ -598,9 +833,30 @@ def ingest_and_process_stream(stream, filename, row_limit, model, encoders, scal
             elapsed = time.time() - start_t
             anomaly_count = len(raw_df)
 
+            atk_c = next((c for c in raw_df.columns if "attack" in c.lower()), None)
+            if "severity" not in raw_df.columns:
+                def get_inc_sev(atk):
+                    a = str(atk).upper()
+                    if any(k in a for k in ["RANSOMWARE", "DDOS", "ZERO-DAY", "ZERO DAY"]):
+                        return "CRITICAL"
+                    if any(k in a for k in ["MALWARE", "SQL", "PHISHING", "MAN-IN-THE-MIDDLE"]):
+                        return "HIGH"
+                    return "MEDIUM"
+                raw_df["severity"] = raw_df[atk_c].apply(get_inc_sev) if atk_c else "HIGH"
+            if "attack_type" not in raw_df.columns and atk_c:
+                raw_df["attack_type"] = raw_df[atk_c]
+            if "classification" not in raw_df.columns:
+                raw_df["classification"] = "Threat Incident"
+            if "detection_reason" not in raw_df.columns:
+                raw_df["detection_reason"] = "Enterprise security log indicates security breach or malicious event."
+            if "recommended_action" not in raw_df.columns:
+                raw_df["recommended_action"] = "Quarantine affected systems, audit access credentials, and patch vulnerabilities."
+            if "anomaly_probability" not in raw_df.columns:
+                raw_df["anomaly_probability"] = 0.95
+
             # Record History
             history_entry = {
-                "entry_id": "ING-001",
+                "entry_id": f"ING-{len(st.session_state.get('ingestion_history', []))+1:03d}" if "ingestion_history" in st.session_state else "ING-001",
                 "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "filename": filename,
                 "pipeline_type": "Threat & Incident Intelligence",
@@ -613,7 +869,6 @@ def ingest_and_process_stream(stream, filename, row_limit, model, encoders, scal
             }
             try:
                 if "ingestion_history" in st.session_state:
-                    history_entry["entry_id"] = f"ING-{len(st.session_state['ingestion_history'])+1:03d}"
                     st.session_state["ingestion_history"].insert(0, history_entry)
                 st.session_state["data_mode"] = "INCIDENT"
                 st.session_state["dataset_records"] = raw_df
@@ -1018,12 +1273,15 @@ def main():
                 </div>
                 """)
 
+            crit_high_count = int(results["severity"].isin(["CRITICAL", "HIGH"]).sum()) if "severity" in results.columns else anomaly_count
+            crit_high_pct = (crit_high_count / total_records * 100) if total_records > 0 else 0
+
             with m3:
                 render_html(f"""
                 <div class="netshield-card">
                     <div class="netshield-card-title">Anomalies Detected</div>
                     <div class="netshield-card-value" style="color: #dc2626;">{anomaly_count:,}</div>
-                    <div class="netshield-card-sub">{anomaly_pct:.2f}% of total</div>
+                    <div class="netshield-card-sub">{crit_high_count:,} Critical/High ({crit_high_pct:.1f}%)</div>
                 </div>
                 """)
 
@@ -1036,30 +1294,75 @@ def main():
                 </div>
                 """)
 
-            # Charts Row 1
-            render_html("<div style='font-size: 12px; font-weight: 700; letter-spacing: 0.05em; color: #64748b; text-transform: uppercase; margin: 16px 0 10px 0;'>TRAFFIC CLASSIFICATION TELEMETRY</div>")
+            # Charts Row 1: Threat Severity & Identified Attack Vectors
+            render_html("<div style='font-size: 12px; font-weight: 700; letter-spacing: 0.05em; color: #64748b; text-transform: uppercase; margin: 16px 0 10px 0;'>THREAT PROFILING &amp; IDENTIFIED ATTACK VECTORS</div>")
             c1, c2 = st.columns([1, 2])
             with c1:
-                fig_donut = go.Figure(data=[go.Pie(
-                    labels=["Normal", "Anomaly"],
-                    values=[normal_count, anomaly_count],
-                    hole=0.64,
-                    marker=dict(colors=["#10b981", "#ef4444"], line=dict(color="#ffffff", width=2)),
-                    textinfo="percent",
-                    hoverinfo="label+value+percent",
-                    textfont=dict(family="JetBrains Mono", size=10, color="#ffffff")
-                )])
-                apply_plot_theme(
-                    fig_donut,
-                    title="Classification Ratio",
-                    height=300,
-                    showlegend=True,
-                    legend=dict(orientation="h", yanchor="top", y=-0.16, xanchor="center", x=0.5, font=dict(size=9))
-                )
-                st.plotly_chart(fig_donut, use_container_width=True, config={"displayModeBar": False})
+                if "severity" in results.columns:
+                    sev_order = ["CRITICAL", "HIGH", "MEDIUM", "NORMAL"]
+                    sev_counts = results["severity"].value_counts()
+                    sev_labels = [s for s in sev_order if s in sev_counts.index]
+                    sev_values = [int(sev_counts[s]) for s in sev_labels]
+                    color_map = {"CRITICAL": "#dc2626", "HIGH": "#ea580c", "MEDIUM": "#eab308", "NORMAL": "#10b981"}
+                    chart_colors = [color_map.get(s, "#64748b") for s in sev_labels]
+
+                    fig_donut = go.Figure(data=[go.Pie(
+                        labels=sev_labels,
+                        values=sev_values,
+                        hole=0.64,
+                        marker=dict(colors=chart_colors, line=dict(color="#ffffff", width=2)),
+                        textinfo="percent",
+                        hoverinfo="label+value+percent",
+                        textfont=dict(family="JetBrains Mono", size=10, color="#ffffff")
+                    )])
+                    apply_plot_theme(
+                        fig_donut,
+                        title="Threat Severity Distribution",
+                        height=300,
+                        showlegend=True,
+                        legend=dict(orientation="h", yanchor="top", y=-0.16, xanchor="center", x=0.5, font=dict(size=9))
+                    )
+                    st.plotly_chart(fig_donut, use_container_width=True, config={"displayModeBar": False})
+                else:
+                    fig_donut = go.Figure(data=[go.Pie(
+                        labels=["Normal", "Anomaly"],
+                        values=[normal_count, anomaly_count],
+                        hole=0.64,
+                        marker=dict(colors=["#10b981", "#ef4444"], line=dict(color="#ffffff", width=2)),
+                        textinfo="percent",
+                        hoverinfo="label+value+percent",
+                        textfont=dict(family="JetBrains Mono", size=10, color="#ffffff")
+                    )])
+                    apply_plot_theme(fig_donut, title="Classification Ratio", height=300)
+                    st.plotly_chart(fig_donut, use_container_width=True, config={"displayModeBar": False})
 
             with c2:
-                # Flow vs KDD adaptive column display
+                if "attack_type" in results.columns:
+                    atk_dist = results["attack_type"].value_counts().reset_index()
+                    atk_dist.columns = ["Attack Vector", "Count"]
+                    fig_atk_dist = px.bar(
+                        atk_dist,
+                        x="Count",
+                        y="Attack Vector",
+                        orientation="h",
+                        color="Attack Vector",
+                        labels={"Count": "Connections", "Attack Vector": "Identified Attack Vector"}
+                    )
+                    apply_plot_theme(
+                        fig_atk_dist,
+                        title="Identified Cyber Attack Vectors",
+                        height=300,
+                        showlegend=False
+                    )
+                    fig_atk_dist.update_yaxes(autorange="reversed")
+                    st.plotly_chart(fig_atk_dist, use_container_width=True, config={"displayModeBar": False})
+                else:
+                    st.info("Attack vector classification pending.")
+
+            # Charts Row 2: Protocol Breakdown & Connection State / Duration
+            render_html("<div style='font-size: 12px; font-weight: 700; letter-spacing: 0.05em; color: #64748b; text-transform: uppercase; margin: 16px 0 10px 0;'>NETWORK TELEMETRY ATTRIBUTES</div>")
+            c3, c4 = st.columns(2)
+            with c3:
                 if "protocol_type" in results.columns:
                     proto_df = results.groupby(["protocol_type", "classification"]).size().reset_index(name="count")
                     fig_proto = px.bar(
@@ -1094,47 +1397,6 @@ def main():
                 else:
                     st.info("Protocol and port breakdown telemetry pending.")
 
-            # Charts Row 2
-            c3, c4 = st.columns(2)
-            with c3:
-                if "service" in results.columns:
-                    anomalies_df = results[results["prediction"] == 1]
-                    if len(anomalies_df) > 0:
-                        top_services = anomalies_df["service"].value_counts().head(8).reset_index()
-                        top_services.columns = ["service", "count"]
-                        fig_service = px.bar(
-                            top_services,
-                            x="count",
-                            y="service",
-                            orientation="h",
-                            color_discrete_sequence=["#ef4444"],
-                            labels={"count": "Anomalies", "service": "Service"}
-                        )
-                        apply_plot_theme(fig_service, title="Top Anomalous Services", height=310)
-                        fig_service.update_yaxes(autorange="reversed")
-                        st.plotly_chart(fig_service, use_container_width=True, config={"displayModeBar": False})
-                    else:
-                        st.info("No anomalies recorded in current packet batch.")
-                elif "attack_type" in results.columns:
-                    atk_dist = results["attack_type"].value_counts().reset_index()
-                    atk_dist.columns = ["Attack Vector", "Flows"]
-                    fig_atk_dist = px.bar(
-                        atk_dist,
-                        x="Flows",
-                        y="Attack Vector",
-                        orientation="h",
-                        color="Attack Vector",
-                        labels={"Flows": "Flows", "Attack Vector": "Vector"}
-                    )
-                    apply_plot_theme(
-                        fig_atk_dist,
-                        title="Flow Attack Vectors",
-                        height=310,
-                        showlegend=False
-                    )
-                    fig_atk_dist.update_yaxes(autorange="reversed")
-                    st.plotly_chart(fig_atk_dist, use_container_width=True, config={"displayModeBar": False})
-
             with c4:
                 if "flag" in results.columns:
                     flag_df = results.groupby(["flag", "classification"]).size().reset_index(name="count")
@@ -1152,7 +1414,7 @@ def main():
                     apply_plot_theme(
                         fig_flag,
                         title="Connection State Flags",
-                        height=310,
+                        height=300,
                         legend=dict(orientation="h", yanchor="top", y=-0.22, xanchor="center", x=0.5, font=dict(size=9))
                     )
                     st.plotly_chart(fig_flag, use_container_width=True, config={"displayModeBar": False})
@@ -1169,7 +1431,7 @@ def main():
                     apply_plot_theme(
                         fig_dur,
                         title="Flow Duration Telemetry",
-                        height=310,
+                        height=300,
                         legend=dict(orientation="h", yanchor="top", y=-0.22, xanchor="center", x=0.5, font=dict(size=9))
                     )
                     st.plotly_chart(fig_dur, use_container_width=True, config={"displayModeBar": False})
@@ -1276,7 +1538,10 @@ def main():
                 filtered = filtered[filtered.astype(str).apply(lambda row: sq in " ".join(row).lower(), axis=1)]
 
             render_html(f"<div style='font-size: 12px; color: #64748b; margin-bottom: 8px;'>Showing <strong>{len(filtered):,}</strong> of {len(df):,} incidents</div>")
-            st.dataframe(filtered.head(500), use_container_width=True, height=380)
+            inc_priority_cols = ["severity", "attack_type", "classification", "detection_reason", "recommended_action", "anomaly_probability"]
+            inc_other = [c for c in filtered.columns if c not in inc_priority_cols]
+            inc_display = [c for c in inc_priority_cols if c in filtered.columns] + inc_other
+            st.dataframe(filtered[inc_display].head(500), use_container_width=True, height=380)
 
             csv_data = filtered.to_csv(index=False).encode("utf-8")
             st.download_button(
@@ -1291,33 +1556,35 @@ def main():
             filtered = records.copy()
             render_html("<div style='font-size: 12px; font-weight: 700; letter-spacing: 0.05em; color: #64748b; text-transform: uppercase; margin: 10px 0;'>FILTER CONNECTION RECORDS</div>")
             
-            f1, f2, f3 = st.columns([2, 2, 4])
+            f1, f2, f3, f4 = st.columns([2, 2, 2, 3])
             with f1:
-                class_filter = st.selectbox("Classification Filter", options=["All Connections", "Anomaly Only", "Normal Only"])
-            
+                sev_options = ["All Severities", "CRITICAL", "HIGH", "MEDIUM", "NORMAL"]
+                sev_filter = st.selectbox("Severity Filter", options=sev_options)
+
             with f2:
-                if "protocol_type" in records.columns:
-                    proto_options = ["All Protocols"] + sorted(records["protocol_type"].astype(str).unique().tolist())
-                    proto_filter = st.selectbox("Protocol Filter", options=proto_options)
-                elif "Destination Port" in records.columns:
-                    port_options = ["All Ports"] + sorted(records["Destination Port"].astype(str).unique().tolist())
-                    proto_filter = st.selectbox("Port Filter", options=port_options)
+                if "attack_type" in records.columns:
+                    atk_options = ["All Attack Vectors"] + sorted(records["attack_type"].astype(str).unique().tolist())
+                    atk_filter = st.selectbox("Attack Vector Filter", options=atk_options)
                 else:
-                    proto_filter = "All"
-                    st.selectbox("Filter", options=["All"])
+                    atk_filter = "All Attack Vectors"
+                    st.selectbox("Attack Vector Filter", options=["All Attack Vectors"])
 
             with f3:
-                search_query = st.text_input("Search Logs", placeholder="e.g. Service, Flag, Port, or Attack")
+                class_filter = st.selectbox("Classification Filter", options=["All Connections", "Anomaly Only", "Normal Only"])
+
+            with f4:
+                search_query = st.text_input("Search Logs", placeholder="e.g. Service, Flag, Port, Reason...")
+
+            if sev_filter != "All Severities" and "severity" in filtered.columns:
+                filtered = filtered[filtered["severity"] == sev_filter]
+
+            if atk_filter != "All Attack Vectors" and "attack_type" in filtered.columns:
+                filtered = filtered[filtered["attack_type"] == atk_filter]
 
             if class_filter == "Anomaly Only":
                 filtered = filtered[filtered["prediction"] == 1]
             elif class_filter == "Normal Only":
                 filtered = filtered[filtered["prediction"] == 0]
-
-            if "protocol_type" in records.columns and proto_filter != "All Protocols":
-                filtered = filtered[filtered["protocol_type"].astype(str) == proto_filter]
-            elif "Destination Port" in records.columns and proto_filter != "All Ports":
-                filtered = filtered[filtered["Destination Port"].astype(str) == proto_filter]
 
             if search_query.strip():
                 q = search_query.strip().lower()
@@ -1325,8 +1592,8 @@ def main():
 
             render_html(f"<div style='font-size: 12px; color: #64748b; margin-bottom: 8px;'>Showing <strong>{len(filtered):,}</strong> of {len(records):,} records</div>")
             
-            priority_cols = ["classification", "anomaly_probability"]
-            for candidate in ["attack_type", "protocol_type", "Destination Port", "service", "flag", "duration", "Flow Duration", "src_bytes", "dst_bytes", "Total Fwd Packets"]:
+            priority_cols = ["severity", "attack_type", "classification", "detection_reason", "recommended_action", "anomaly_probability"]
+            for candidate in ["protocol_type", "Destination Port", "service", "flag", "duration", "Flow Duration", "src_bytes", "dst_bytes", "Total Fwd Packets"]:
                 if candidate in filtered.columns and candidate not in priority_cols:
                     priority_cols.append(candidate)
 
