@@ -30,6 +30,23 @@ const tabHistoryBtn = document.getElementById('tabHistoryBtn');
 const historyList = document.getElementById('historyList');
 const historyEmptyNotice = document.getElementById('historyEmptyNotice');
 
+const btnClearData = document.getElementById('btnClearData');
+if (btnClearData) {
+  btnClearData.addEventListener('click', () => {
+    currentDataset = null;
+    currentMode = null;
+    rawCSVData = [];
+    fileNameDisplay.textContent = 'Upload CSV File';
+    fileInput.value = '';
+    emptyState.style.display = 'block';
+    telemetryView.style.display = 'none';
+    const logsContent = document.getElementById('logsContent');
+    const logsEmpty = document.getElementById('logsEmptyNotice');
+    if (logsContent) logsContent.style.display = 'none';
+    if (logsEmpty) logsEmpty.style.display = 'block';
+  });
+}
+
 // Tab Navigation
 tabButtons.forEach(btn => {
   btn.addEventListener('click', () => {
@@ -290,10 +307,12 @@ function renderKPIs(schema, rows, normal, anomaly, durationMs) {
 const plotLayoutDefaults = {
   paper_bgcolor: '#ffffff',
   plot_bgcolor: '#ffffff',
-  font: { family: 'Inter, sans-serif', color: '#475569', size: 12 },
-  margin: { l: 45, r: 30, t: 55, b: 55 },
+  font: { family: 'Inter, sans-serif', color: '#475569', size: 10 },
+  margin: { l: 45, r: 20, t: 45, b: 55 },
   height: 310,
-  legend: { orientation: 'h', yanchor: 'top', y: -0.22, xanchor: 'center', x: 0.5 }
+  legend: { orientation: 'h', yanchor: 'top', y: -0.22, xanchor: 'center', x: 0.5, font: { size: 9 } },
+  xaxis: { automargin: true, tickfont: { size: 9, color: '#64748b' }, title: { font: { size: 10 } } },
+  yaxis: { automargin: true, tickfont: { size: 9, color: '#64748b' }, title: { font: { size: 10 } } }
 };
 
 const plotConfig = { displayModeBar: false, responsive: true };
@@ -323,11 +342,13 @@ function renderIncidentCharts(rows) {
     labels: Object.keys(atkCounts),
     values: Object.values(atkCounts),
     type: 'pie',
-    hole: 0.6,
+    hole: 0.64,
+    textfont: { size: 10 },
+    textinfo: 'percent',
     marker: { colors: ['#2563eb', '#ef4444', '#f59e0b', '#10b981', '#8b5cf6', '#ec4899'] }
   }], {
     ...plotLayoutDefaults,
-    title: { text: '<b>Incident Distribution by Attack Vector</b>', x: 0.01, y: 0.96 }
+    title: { text: '<b>Attack Vector Distribution</b>', x: 0.01, y: 0.97, font: { size: 12, color: '#0f172a' } }
   }, plotConfig);
 
   // Chart 2: Industry Exposure
@@ -344,7 +365,8 @@ function renderIncidentCharts(rows) {
     marker: { color: '#2563eb' }
   }], {
     ...plotLayoutDefaults,
-    title: { text: '<b>Financial Exposure by Target Industry ($M)</b>', x: 0.01, y: 0.96 }
+    title: { text: '<b>Loss by Target Sector ($M)</b>', x: 0.01, y: 0.97, font: { size: 12, color: '#0f172a' } },
+    xaxis: { ...plotLayoutDefaults.xaxis, title: { text: 'Loss ($M)', font: { size: 10 } } }
   }, plotConfig);
 
   // Chart 3: Threat Actor
@@ -356,7 +378,8 @@ function renderIncidentCharts(rows) {
     marker: { color: '#475569' }
   }], {
     ...plotLayoutDefaults,
-    title: { text: '<b>Threat Actor & Origin Attribution</b>', x: 0.01, y: 0.96 }
+    title: { text: '<b>Threat Actor Attribution</b>', x: 0.01, y: 0.97, font: { size: 12, color: '#0f172a' } },
+    yaxis: { ...plotLayoutDefaults.yaxis, title: { text: 'Incidents', font: { size: 10 } } }
   }, plotConfig);
 
   // Chart 4: Vulnerability vs Defense
@@ -371,7 +394,8 @@ function renderIncidentCharts(rows) {
   Plotly.newPlot('chartPlot4', traces, {
     ...plotLayoutDefaults,
     barmode: 'stack',
-    title: { text: '<b>Security Vulnerabilities vs Defense Mechanisms</b>', x: 0.01, y: 0.96 }
+    title: { text: '<b>Vulnerabilities vs Defenses</b>', x: 0.01, y: 0.97, font: { size: 12, color: '#0f172a' } },
+    xaxis: { ...plotLayoutDefaults.xaxis, tickangle: -15 }
   }, plotConfig);
 
   // Chart 5: Countries
@@ -385,8 +409,9 @@ function renderIncidentCharts(rows) {
     marker: { color: '#059669' }
   }], {
     ...plotLayoutDefaults,
-    yaxis: { autorange: 'reversed' },
-    title: { text: '<b>Top Impacted Countries by Incident Volume</b>', x: 0.01, y: 0.96 }
+    yaxis: { ...plotLayoutDefaults.yaxis, autorange: 'reversed' },
+    xaxis: { ...plotLayoutDefaults.xaxis, title: { text: 'Incidents', font: { size: 10 } } },
+    title: { text: '<b>Top Impacted Countries</b>', x: 0.01, y: 0.97, font: { size: 12, color: '#0f172a' } }
   }, plotConfig);
 
   // Chart 6: Damage vs Resolution Time Scatter
@@ -395,10 +420,12 @@ function renderIncidentCharts(rows) {
     y: rows.map(r => r[lossKey]),
     mode: 'markers',
     type: 'scatter',
-    marker: { color: '#2563eb', size: 6, opacity: 0.7 }
+    marker: { color: '#2563eb', size: 5, opacity: 0.7 }
   }], {
     ...plotLayoutDefaults,
-    title: { text: '<b>Financial Damage vs Incident Resolution Time</b>', x: 0.01, y: 0.96 }
+    title: { text: '<b>Damage vs Resolution Latency</b>', x: 0.01, y: 0.97, font: { size: 12, color: '#0f172a' } },
+    xaxis: { ...plotLayoutDefaults.xaxis, title: { text: 'Latency (hrs)', font: { size: 10 } } },
+    yaxis: { ...plotLayoutDefaults.yaxis, title: { text: 'Loss ($M)', font: { size: 10 } } }
   }, plotConfig);
 }
 
@@ -411,11 +438,13 @@ function renderTrafficCharts(rows, schema) {
     labels: ['Normal', 'Anomaly'],
     values: [normalCount, anomCount],
     type: 'pie',
-    hole: 0.62,
+    hole: 0.64,
+    textfont: { size: 10 },
+    textinfo: 'percent',
     marker: { colors: ['#10b981', '#ef4444'] }
   }], {
     ...plotLayoutDefaults,
-    title: { text: '<b>Classification Ratio</b>', x: 0.01, y: 0.96 }
+    title: { text: '<b>Classification Ratio</b>', x: 0.01, y: 0.97, font: { size: 12, color: '#0f172a' } }
   }, plotConfig);
 
   // Chart 2: Protocol or Port Volume
@@ -428,7 +457,8 @@ function renderTrafficCharts(rows, schema) {
       marker: { color: '#2563eb' }
     }], {
       ...plotLayoutDefaults,
-      title: { text: '<b>Volume by Transport Protocol</b>', x: 0.01, y: 0.96 }
+      title: { text: '<b>Volume by Protocol</b>', x: 0.01, y: 0.97, font: { size: 12, color: '#0f172a' } },
+      yaxis: { ...plotLayoutDefaults.yaxis, title: { text: 'Connections', font: { size: 10 } } }
     }, plotConfig);
   } else if (rows[0]['Destination Port'] !== undefined) {
     const portCounts = countBy(rows, 'Destination Port');
@@ -440,7 +470,8 @@ function renderTrafficCharts(rows, schema) {
       marker: { color: '#2563eb' }
     }], {
       ...plotLayoutDefaults,
-      title: { text: '<b>Top Target Destination Ports</b>', x: 0.01, y: 0.96 }
+      title: { text: '<b>Top Destination Ports</b>', x: 0.01, y: 0.97, font: { size: 12, color: '#0f172a' } },
+      yaxis: { ...plotLayoutDefaults.yaxis, title: { text: 'Flows', font: { size: 10 } } }
     }, plotConfig);
   }
 
@@ -456,7 +487,8 @@ function renderTrafficCharts(rows, schema) {
       marker: { color: '#ef4444' }
     }], {
       ...plotLayoutDefaults,
-      title: { text: '<b>Top Services Encountering Anomalies</b>', x: 0.01, y: 0.96 }
+      title: { text: '<b>Top Anomalous Services</b>', x: 0.01, y: 0.97, font: { size: 12, color: '#0f172a' } },
+      xaxis: { ...plotLayoutDefaults.xaxis, title: { text: 'Anomalies', font: { size: 10 } } }
     }, plotConfig);
   } else {
     const atkCounts = countBy(rows, 'attack_type');
@@ -468,7 +500,8 @@ function renderTrafficCharts(rows, schema) {
       marker: { color: '#2563eb' }
     }], {
       ...plotLayoutDefaults,
-      title: { text: '<b>Attack Vector & Flow Classification</b>', x: 0.01, y: 0.96 }
+      title: { text: '<b>Flow Attack Vectors</b>', x: 0.01, y: 0.97, font: { size: 12, color: '#0f172a' } },
+      xaxis: { ...plotLayoutDefaults.xaxis, title: { text: 'Flows', font: { size: 10 } } }
     }, plotConfig);
   }
 
@@ -482,7 +515,8 @@ function renderTrafficCharts(rows, schema) {
       marker: { color: '#10b981' }
     }], {
       ...plotLayoutDefaults,
-      title: { text: '<b>Connection State Flags</b>', x: 0.01, y: 0.96 }
+      title: { text: '<b>Connection State Flags</b>', x: 0.01, y: 0.97, font: { size: 12, color: '#0f172a' } },
+      yaxis: { ...plotLayoutDefaults.yaxis, title: { text: 'Packets', font: { size: 10 } } }
     }, plotConfig);
   } else {
     const durations = rows.map(r => Math.log10(Math.max(1, parseFloat(r['Flow Duration']) || 1)));
@@ -492,7 +526,8 @@ function renderTrafficCharts(rows, schema) {
       marker: { color: '#2563eb' }
     }], {
       ...plotLayoutDefaults,
-      title: { text: '<b>Flow Duration Telemetry Distribution</b>', x: 0.01, y: 0.96 }
+      title: { text: '<b>Flow Duration Telemetry</b>', x: 0.01, y: 0.97, font: { size: 12, color: '#0f172a' } },
+      xaxis: { ...plotLayoutDefaults.xaxis, title: { text: 'Log(Duration µs)', font: { size: 10 } } }
     }, plotConfig);
   }
 
@@ -504,7 +539,9 @@ function renderTrafficCharts(rows, schema) {
     marker: { color: '#ef4444' }
   }], {
     ...plotLayoutDefaults,
-    title: { text: '<b>Anomaly Probability Confidence Histogram</b>', x: 0.01, y: 0.96 }
+    title: { text: '<b>Anomaly Confidence Distribution</b>', x: 0.01, y: 0.97, font: { size: 12, color: '#0f172a' } },
+    xaxis: { ...plotLayoutDefaults.xaxis, title: { text: 'Score', font: { size: 10 } } },
+    yaxis: { ...plotLayoutDefaults.yaxis, title: { text: 'Frequency', font: { size: 10 } } }
   }, plotConfig);
 
   // Chart 6: Volume Signature
@@ -514,22 +551,26 @@ function renderTrafficCharts(rows, schema) {
       y: rows.map(r => Math.log10(Math.max(1, parseFloat(r.dst_bytes) || 1))),
       mode: 'markers',
       type: 'scatter',
-      marker: { color: rows.map(r => r.prediction === 1 ? '#ef4444' : '#10b981'), size: 6, opacity: 0.65 }
+      marker: { color: rows.map(r => r.prediction === 1 ? '#ef4444' : '#10b981'), size: 5, opacity: 0.65 }
     }], {
       ...plotLayoutDefaults,
-      title: { text: '<b>Payload Volume Signature (Src vs Dst Bytes)</b>', x: 0.01, y: 0.96 }
-    }, plotConfig);
+      title: { text: '<b>Payload Signature (Src / Dst)</b>', x: 0.01, y: 0.97, font: { size: 12, color: '#0f172a' } },
+      xaxis: { ...plotLayoutDefaults.xaxis, title: { text: 'Log(Src Bytes)', font: { size: 10 } } },
+      yaxis: { ...plotLayoutDefaults.yaxis, title: { text: 'Log(Dst Bytes)', font: { size: 10 } } }
+    }], plotConfig);
   } else {
     Plotly.newPlot('chartPlot6', [{
       x: rows.map(r => Math.log10(Math.max(1, parseFloat(r['Total Fwd Packets']) || 1))),
       y: rows.map(r => Math.log10(Math.max(1, parseFloat(r['Flow Duration']) || 1))),
       mode: 'markers',
       type: 'scatter',
-      marker: { color: rows.map(r => r.prediction === 1 ? '#ef4444' : '#10b981'), size: 6, opacity: 0.7 }
+      marker: { color: rows.map(r => r.prediction === 1 ? '#ef4444' : '#10b981'), size: 5, opacity: 0.7 }
     }], {
       ...plotLayoutDefaults,
-      title: { text: '<b>Flow Duration vs Packet Volume Signature</b>', x: 0.01, y: 0.96 }
-    }, plotConfig);
+      title: { text: '<b>Flow Duration vs Packets</b>', x: 0.01, y: 0.97, font: { size: 12, color: '#0f172a' } },
+      xaxis: { ...plotLayoutDefaults.xaxis, title: { text: 'Log(Fwd Pkts)', font: { size: 10 } } },
+      yaxis: { ...plotLayoutDefaults.yaxis, title: { text: 'Log(Duration)', font: { size: 10 } } }
+    }], plotConfig);
   }
 }
 

@@ -318,43 +318,57 @@ CATEGORICAL_PACKET_COLS = ["protocol_type", "service", "flag"]
 # ==============================================================================
 # Plot Theme & Layout Styler (Collision-Free Legends & Spacing)
 # ==============================================================================
-def apply_plot_theme(fig, title="", height=320, **kwargs):
+def apply_plot_theme(fig, title="", height=310, **kwargs):
     """
     Safely styles Plotly figure with adequate margins, generous top spacing,
-    and bottom-anchored or cleanly aligned legends so titles and legends never collide.
+    compact typography, and bottom-anchored legends to prevent any text clipping or overlap.
     """
     default_legend = dict(
         orientation="h",
         yanchor="top",
-        y=-0.22,
+        y=-0.25,
         xanchor="center",
         x=0.5,
-        font=dict(size=11, color="#475569")
+        font=dict(size=10, color="#475569")
     )
     
     # Check if kwargs supplies a custom legend
     chosen_legend = kwargs.pop("legend", default_legend)
-    chosen_margin = kwargs.pop("margin", dict(l=45, r=30, t=55, b=55))
+    chosen_margin = kwargs.pop("margin", dict(l=48, r=20, t=48, b=60))
 
     fig.update_layout(
         paper_bgcolor="#ffffff",
         plot_bgcolor="#ffffff",
-        font=dict(family="Inter, sans-serif", color="#475569", size=12),
+        font=dict(family="Inter, sans-serif", color="#475569", size=11),
         margin=chosen_margin,
         height=height,
         title=dict(
             text=f"<b>{title}</b>",
-            font=dict(size=13, color="#1e293b"),
+            font=dict(size=12, color="#0f172a"),
             x=0.01,
-            y=0.96,
+            y=0.97,
             xanchor="left",
             yanchor="top"
         ),
         legend=chosen_legend,
         **kwargs
     )
-    fig.update_xaxes(gridcolor="#f1f5f9", linecolor="#e2e8f0", tickcolor="#e2e8f0")
-    fig.update_yaxes(gridcolor="#f1f5f9", linecolor="#e2e8f0", tickcolor="#e2e8f0")
+    fig.update_xaxes(
+        gridcolor="#f1f5f9",
+        linecolor="#e2e8f0",
+        tickcolor="#e2e8f0",
+        tickfont=dict(size=9, color="#64748b"),
+        title_font=dict(size=10, color="#475569"),
+        automargin=True
+    )
+    fig.update_yaxes(
+        gridcolor="#f1f5f9",
+        linecolor="#e2e8f0",
+        tickcolor="#e2e8f0",
+        tickfont=dict(size=9, color="#64748b"),
+        title_font=dict(size=10, color="#475569"),
+        automargin=True
+    )
     return fig
 
 # ==============================================================================
@@ -599,7 +613,19 @@ def main():
         )
 
         render_html("<hr style='border-color: #e2e8f0; margin: 14px 0;'>")
-        analyze_button = st.button("Process & Ingest Dataset", use_container_width=True)
+        col_act1, col_act2 = st.columns([3, 2])
+        with col_act1:
+            analyze_button = st.button("Process & Ingest", use_container_width=True)
+        with col_act2:
+            clear_button = st.button("Clear Data", use_container_width=True)
+
+        if clear_button:
+            st.session_state["data_mode"] = None
+            st.session_state["dataset_records"] = None
+            st.session_state["ground_truth"] = None
+            st.session_state["inference_time"] = 0.0
+            st.session_state["source_name"] = None
+            st.rerun()
 
         render_html("<div style='font-size: 11px; font-weight: 600; color: #94a3b8; text-transform: uppercase; margin: 16px 0 8px 0;'>QUICK BUILT-IN DATASETS</div>")
         col_s1, col_s2 = st.columns(2)
@@ -848,20 +874,21 @@ def main():
             with ic1:
                 if attack_col:
                     atk_counts = df[attack_col].value_counts().reset_index()
-                    atk_counts.columns = ["Attack Type", "Count"]
+                    atk_counts.columns = ["Attack Vector", "Count"]
                     fig_atk = px.pie(
                         atk_counts,
-                        names="Attack Type",
+                        names="Attack Vector",
                         values="Count",
-                        hole=0.6,
+                        hole=0.64,
                         color_discrete_sequence=["#2563eb", "#ef4444", "#f59e0b", "#10b981", "#8b5cf6", "#ec4899"]
                     )
+                    fig_atk.update_traces(textfont_size=10, textinfo="percent")
                     apply_plot_theme(
                         fig_atk,
-                        title="Incident Distribution by Attack Vector",
+                        title="Attack Vector Distribution",
                         height=310,
                         showlegend=True,
-                        legend=dict(orientation="h", yanchor="top", y=-0.18, xanchor="center", x=0.5)
+                        legend=dict(orientation="h", yanchor="top", y=-0.22, xanchor="center", x=0.5, font=dict(size=9))
                     )
                     st.plotly_chart(fig_atk, use_container_width=True, config={"displayModeBar": False})
 
@@ -875,24 +902,25 @@ def main():
                         y=industry_col,
                         orientation="h",
                         color_discrete_sequence=["#2563eb"],
-                        labels={loss_col: "Financial Loss ($ Million)", industry_col: "Target Sector"}
+                        labels={loss_col: "Loss ($M)", industry_col: "Sector"}
                     )
-                    apply_plot_theme(fig_ind, title="Financial Exposure by Target Industry ($M)", height=310)
+                    apply_plot_theme(fig_ind, title="Loss by Target Sector ($M)", height=310)
                     st.plotly_chart(fig_ind, use_container_width=True, config={"displayModeBar": False})
 
-            # Incident Charts Row 2 (Legends placed cleanly below plots without colliding with titles)
+            # Incident Charts Row 2
             ic3, ic4 = st.columns(2)
             with ic3:
                 if source_col:
                     src_df = df[source_col].value_counts().reset_index()
-                    src_df.columns = ["Threat Actor", "Incidents"]
+                    src_df.columns = ["Actor", "Count"]
                     fig_src = px.bar(
                         src_df,
-                        x="Threat Actor",
-                        y="Incidents",
-                        color_discrete_sequence=["#475569"]
+                        x="Actor",
+                        y="Count",
+                        color_discrete_sequence=["#475569"],
+                        labels={"Actor": "Threat Actor", "Count": "Incidents"}
                     )
-                    apply_plot_theme(fig_src, title="Threat Actor & Origin Attribution", height=320)
+                    apply_plot_theme(fig_src, title="Threat Actor Attribution", height=310)
                     st.plotly_chart(fig_src, use_container_width=True, config={"displayModeBar": False})
 
             with ic4:
@@ -904,14 +932,15 @@ def main():
                         y="Count",
                         color=defense_col,
                         barmode="stack",
-                        labels={vuln_col: "Vulnerability Type", "Count": "Occurrences", defense_col: "Defense"}
+                        labels={vuln_col: "Vulnerability", "Count": "Count", defense_col: "Defense"}
                     )
+                    fig_cross.update_xaxes(tickangle=-15)
                     apply_plot_theme(
                         fig_cross,
-                        title="Security Vulnerabilities vs Defense Mechanisms",
-                        height=320,
-                        margin=dict(l=45, r=30, t=55, b=65),
-                        legend=dict(orientation="h", yanchor="top", y=-0.24, xanchor="center", x=0.5)
+                        title="Vulnerabilities vs Defenses",
+                        height=310,
+                        margin=dict(l=45, r=20, t=48, b=65),
+                        legend=dict(orientation="h", yanchor="top", y=-0.26, xanchor="center", x=0.5, font=dict(size=9))
                     )
                     st.plotly_chart(fig_cross, use_container_width=True, config={"displayModeBar": False})
 
@@ -920,15 +949,16 @@ def main():
             with ic5:
                 if country_col:
                     c_counts = df[country_col].value_counts().head(10).reset_index()
-                    c_counts.columns = ["Country", "Incidents"]
+                    c_counts.columns = ["Country", "Count"]
                     fig_c = px.bar(
                         c_counts,
-                        x="Incidents",
+                        x="Count",
                         y="Country",
                         orientation="h",
-                        color_discrete_sequence=["#059669"]
+                        color_discrete_sequence=["#059669"],
+                        labels={"Count": "Incidents", "Country": "Country"}
                     )
-                    apply_plot_theme(fig_c, title="Top Impacted Countries by Incident Volume", height=320)
+                    apply_plot_theme(fig_c, title="Top Impacted Countries", height=310)
                     fig_c.update_yaxes(autorange="reversed")
                     st.plotly_chart(fig_c, use_container_width=True, config={"displayModeBar": False})
 
@@ -940,14 +970,15 @@ def main():
                         y=loss_col,
                         color=attack_col,
                         hover_data=[country_col, industry_col] if country_col else None,
-                        labels={time_col: "Resolution Latency (Hours)", loss_col: "Financial Loss ($M)", attack_col: "Attack"}
+                        labels={time_col: "Latency (hrs)", loss_col: "Loss ($M)", attack_col: "Attack"}
                     )
+                    fig_sc.update_traces(marker=dict(size=5, opacity=0.7))
                     apply_plot_theme(
                         fig_sc,
-                        title="Financial Damage vs Incident Resolution Time",
-                        height=320,
-                        margin=dict(l=45, r=30, t=55, b=65),
-                        legend=dict(orientation="h", yanchor="top", y=-0.24, xanchor="center", x=0.5)
+                        title="Damage vs Resolution Latency",
+                        height=310,
+                        margin=dict(l=45, r=20, t=48, b=65),
+                        legend=dict(orientation="h", yanchor="top", y=-0.26, xanchor="center", x=0.5, font=dict(size=9))
                     )
                     st.plotly_chart(fig_sc, use_container_width=True, config={"displayModeBar": False})
 
@@ -1016,18 +1047,18 @@ def main():
                 fig_donut = go.Figure(data=[go.Pie(
                     labels=["Normal", "Anomaly"],
                     values=[normal_count, anomaly_count],
-                    hole=0.62,
+                    hole=0.64,
                     marker=dict(colors=["#10b981", "#ef4444"], line=dict(color="#ffffff", width=2)),
                     textinfo="percent",
                     hoverinfo="label+value+percent",
-                    textfont=dict(family="JetBrains Mono", size=13, color="#ffffff")
+                    textfont=dict(family="JetBrains Mono", size=10, color="#ffffff")
                 )])
                 apply_plot_theme(
                     fig_donut,
                     title="Classification Ratio",
                     height=300,
                     showlegend=True,
-                    legend=dict(orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5)
+                    legend=dict(orientation="h", yanchor="top", y=-0.16, xanchor="center", x=0.5, font=dict(size=9))
                 )
                 st.plotly_chart(fig_donut, use_container_width=True, config={"displayModeBar": False})
 
@@ -1042,13 +1073,13 @@ def main():
                         color="classification",
                         barmode="group",
                         color_discrete_map={"Normal": "#10b981", "Anomaly": "#ef4444"},
-                        labels={"protocol_type": "Transport Protocol", "count": "Connections", "classification": "Type"}
+                        labels={"protocol_type": "Protocol", "count": "Count", "classification": "Type"}
                     )
                     apply_plot_theme(
                         fig_proto,
-                        title="Volume by Transport Protocol",
+                        title="Volume by Protocol",
                         height=300,
-                        legend=dict(orientation="h", yanchor="top", y=-0.18, xanchor="center", x=0.5)
+                        legend=dict(orientation="h", yanchor="top", y=-0.22, xanchor="center", x=0.5, font=dict(size=9))
                     )
                     st.plotly_chart(fig_proto, use_container_width=True, config={"displayModeBar": False})
                 elif "Destination Port" in results.columns:
@@ -1060,9 +1091,9 @@ def main():
                         x="Destination Port",
                         y="Flows",
                         color_discrete_sequence=["#2563eb"],
-                        labels={"Destination Port": "Target Port", "Flows": "Active Flows"}
+                        labels={"Destination Port": "Port", "Flows": "Flows"}
                     )
-                    apply_plot_theme(fig_ports, title="Top Target Destination Ports", height=300)
+                    apply_plot_theme(fig_ports, title="Top Destination Ports", height=300)
                     st.plotly_chart(fig_ports, use_container_width=True, config={"displayModeBar": False})
                 else:
                     st.info("Protocol and port breakdown telemetry pending.")
@@ -1083,7 +1114,7 @@ def main():
                             color_discrete_sequence=["#ef4444"],
                             labels={"count": "Anomalies", "service": "Service"}
                         )
-                        apply_plot_theme(fig_service, title="Top Services Encountering Anomalies", height=310)
+                        apply_plot_theme(fig_service, title="Top Anomalous Services", height=310)
                         fig_service.update_yaxes(autorange="reversed")
                         st.plotly_chart(fig_service, use_container_width=True, config={"displayModeBar": False})
                     else:
@@ -1097,11 +1128,11 @@ def main():
                         y="Attack Vector",
                         orientation="h",
                         color="Attack Vector",
-                        labels={"Flows": "Connections", "Attack Vector": "Category"}
+                        labels={"Flows": "Flows", "Attack Vector": "Vector"}
                     )
                     apply_plot_theme(
                         fig_atk_dist,
-                        title="Attack Vector & Flow Classification",
+                        title="Flow Attack Vectors",
                         height=310,
                         showlegend=False
                     )
@@ -1120,13 +1151,13 @@ def main():
                         color="classification",
                         barmode="stack",
                         color_discrete_map={"Normal": "#10b981", "Anomaly": "#ef4444"},
-                        labels={"flag": "Connection Flag", "count": "Packets"}
+                        labels={"flag": "Flag", "count": "Packets"}
                     )
                     apply_plot_theme(
                         fig_flag,
                         title="Connection State Flags",
                         height=310,
-                        legend=dict(orientation="h", yanchor="top", y=-0.18, xanchor="center", x=0.5)
+                        legend=dict(orientation="h", yanchor="top", y=-0.22, xanchor="center", x=0.5, font=dict(size=9))
                     )
                     st.plotly_chart(fig_flag, use_container_width=True, config={"displayModeBar": False})
                 elif "Flow Duration" in results.columns:
@@ -1137,13 +1168,13 @@ def main():
                         color="classification",
                         nbins=25,
                         color_discrete_map={"Normal": "#10b981", "Anomaly": "#ef4444"},
-                        labels={"log_duration": "Log10(Flow Duration µs)", "count": "Flows"}
+                        labels={"log_duration": "Log(Duration µs)", "count": "Flows"}
                     )
                     apply_plot_theme(
                         fig_dur,
-                        title="Flow Duration Telemetry Distribution",
+                        title="Flow Duration Telemetry",
                         height=310,
-                        legend=dict(orientation="h", yanchor="top", y=-0.18, xanchor="center", x=0.5)
+                        legend=dict(orientation="h", yanchor="top", y=-0.22, xanchor="center", x=0.5, font=dict(size=9))
                     )
                     st.plotly_chart(fig_dur, use_container_width=True, config={"displayModeBar": False})
 
@@ -1156,13 +1187,13 @@ def main():
                     nbins=28,
                     color="classification",
                     color_discrete_map={"Normal": "#10b981", "Anomaly": "#ef4444"},
-                    labels={"anomaly_probability": "Anomaly Probability", "count": "Frequency"}
+                    labels={"anomaly_probability": "Score", "count": "Count"}
                 )
                 apply_plot_theme(
                     fig_prob,
-                    title="Anomaly Probability Confidence Histogram",
+                    title="Anomaly Confidence Distribution",
                     height=300,
-                    legend=dict(orientation="h", yanchor="top", y=-0.18, xanchor="center", x=0.5)
+                    legend=dict(orientation="h", yanchor="top", y=-0.22, xanchor="center", x=0.5, font=dict(size=9))
                 )
                 st.plotly_chart(fig_prob, use_container_width=True, config={"displayModeBar": False})
 
@@ -1177,14 +1208,15 @@ def main():
                         y="log_dst_bytes",
                         color="classification",
                         color_discrete_map={"Normal": "#10b981", "Anomaly": "#ef4444"},
-                        opacity=0.65,
-                        labels={"log_src_bytes": "Log10(Source Bytes)", "log_dst_bytes": "Log10(Dest Bytes)"}
+                        opacity=0.6,
+                        labels={"log_src_bytes": "Log(Src)", "log_dst_bytes": "Log(Dst)"}
                     )
+                    fig_scatter.update_traces(marker=dict(size=5))
                     apply_plot_theme(
                         fig_scatter,
-                        title="Payload Volume Signature (Src vs Dst Bytes)",
+                        title="Payload Signature (Src / Dst)",
                         height=300,
-                        legend=dict(orientation="h", yanchor="top", y=-0.18, xanchor="center", x=0.5)
+                        legend=dict(orientation="h", yanchor="top", y=-0.22, xanchor="center", x=0.5, font=dict(size=9))
                     )
                     st.plotly_chart(fig_scatter, use_container_width=True, config={"displayModeBar": False})
                 elif "Total Fwd Packets" in results.columns and "Flow Duration" in results.columns:
@@ -1197,14 +1229,15 @@ def main():
                         y="log_dur",
                         color="classification",
                         color_discrete_map={"Normal": "#10b981", "Anomaly": "#ef4444"},
-                        opacity=0.75,
-                        labels={"log_fwd_pkts": "Log10(Total Fwd Packets)", "log_dur": "Log10(Flow Duration)"}
+                        opacity=0.7,
+                        labels={"log_fwd_pkts": "Log(Fwd Pkts)", "log_dur": "Log(Duration)"}
                     )
+                    fig_flow_sc.update_traces(marker=dict(size=5))
                     apply_plot_theme(
                         fig_flow_sc,
-                        title="Flow Duration vs Packet Volume Signature",
+                        title="Flow Duration vs Packets",
                         height=300,
-                        legend=dict(orientation="h", yanchor="top", y=-0.18, xanchor="center", x=0.5)
+                        legend=dict(orientation="h", yanchor="top", y=-0.22, xanchor="center", x=0.5, font=dict(size=9))
                     )
                     st.plotly_chart(fig_flow_sc, use_container_width=True, config={"displayModeBar": False})
 
