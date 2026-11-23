@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Netshield - Cyber Security & Anomaly Telemetry</title>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <!-- Plotly.js & PapaParse -->
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <svg width="34" height="34" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect width="36" height="36" rx="8" fill="#2563EB"/>
+          <path d="M18 7L9 11V18C9 23.5 12.8 28.7 18 30C23.2 28.7 27 23.5 27 18V11L18 7Z" fill="#1D4ED8" stroke="#FFFFFF" stroke-width="2" stroke-linejoin="round"/>
+          <circle cx="18" cy="18.5" r="2.5" fill="#60A5FA"/>
+          <path d="M14 15.5L18 18.5L22 15.5" stroke="#FFFFFF" stroke-width="1.8" stroke-linecap="round"/>
+          <path d="M18 18.5V23.5" stroke="#FFFFFF" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+        <span class="sidebar-brand-name">Netshield</span>
+      </div>
+
+      <div class="section-label">Upload Cyber Dataset</div>
+      <div class="file-dropzone" id="dropzone">
+        <input type="file" id="fileInput" accept=".csv" />
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="17 8 12 3 7 8"/>
+          <line x1="12" y1="3" x2="12" y2="15"/>
+        </svg>
+        <div class="drop-text" id="fileNameDisplay">Upload CSV File</div>
+        <div class="drop-sub">Drag and drop or click to browse</div>
+      </div>
+
+      <div class="form-group">
+        <label for="sampleLimit">Sample Processing Limit</label>
+        <select id="sampleLimit">
+          <option value="1000" selected>1,000</option>
+          <option value="5000">5,000</option>
+          <option value="10000">10,000</option>
+          <option value="25000">25,000</option>
+          <option value="all">All Records</option>
+        </select>
+      </div>
+
+      <hr class="sidebar-divider" />
+
+      <button class="btn btn-primary" id="btnProcess">Process & Ingest Dataset</button>
+
+      <div class="section-label" style="margin-top: 18px;">Quick Built-in Datasets</div>
+      <div class="btn-grid">
+        <button class="btn btn-secondary" id="btnLoadIncidents">Threat Incidents</button>
+        <button class="btn btn-secondary" id="btnLoadPackets">KDD Packets</button>
+      </div>
+      <button class="btn btn-secondary" id="btnLoadFlow" style="width: 100%; margin-top: 8px;">Flow Telemetry (CIC-IDS)</button>
+
+      <!-- Engine Specs Badge -->
+      <div class="spec-card">
+        <div class="spec-label">Adaptive Engine Specs</div>
+        <div class="spec-title">Universal Multi-Schema Engine</div>
+        <div class="spec-item">• Cyber Threat Incidents (10-col)</div>
+        <div class="spec-item">• NSL-KDD Random Forest (41-feat)</div>
+        <div class="spec-item">• CIC-IDS Flow Telemetry (79-feat)</div>
+        <div class="spec-status">Status: All Pipelines Operational</div>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+      <!-- Topbar Header -->
+      <header class="netshield-topbar">
+        <div class="netshield-branding">
+          <svg width="34" height="34" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect width="36" height="36" rx="8" fill="#2563EB"/>
+            <path d="M18 7L9 11V18C9 23.5 12.8 28.7 18 30C23.2 28.7 27 23.5 27 18V11L18 7Z" fill="#1D4ED8" stroke="#FFFFFF" stroke-width="2" stroke-linejoin="round"/>
+            <circle cx="18" cy="18.5" r="2.5" fill="#60A5FA"/>
+            <path d="M14 15.5L18 18.5L22 15.5" stroke="#FFFFFF" stroke-width="1.8" stroke-linecap="round"/>
+            <path d="M18 18.5V23.5" stroke="#FFFFFF" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+          <div class="netshield-brand-text">
+            <span class="netshield-title">Netshield</span>
+            <span class="netshield-subtitle">Unified Cyber Threat Telemetry & Anomaly Analysis Console</span>
+          </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span class="netshield-badge">ENGINE ONLINE</span>
+        </div>
+      </header>
+
+      <!-- Tabs Navigation -->
+      <div class="tabs-bar">
+        <button class="tab-button active" data-tab="tab-analytics">Threat & Telemetry Analytics</button>
+        <button class="tab-button" data-tab="tab-logs">Record Logs & Export</button>
+        <button class="tab-button" data-tab="tab-history" id="tabHistoryBtn">Ingestion History (0)</button>
+      </div>
+
+      <!-- Tab 1: Threat & Telemetry Analytics -->
+      <section class="tab-content active" id="tab-analytics">
+        <!-- Empty State -->
+        <div class="empty-state-box" id="emptyState">
+          <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+          <div class="empty-state-title">No Security Data Ingested</div>
+          <div class="empty-state-text">
+            Upload any network traffic log, flow dataset (CIC-IDS), or cybersecurity incidents CSV in the sidebar, or click one of the 
+            quick dataset buttons to populate live telemetry and analytics.
+          </div>
+        </div>
+
+        <!-- Populated Telemetry View -->
+        <div id="telemetryView" style="display: none;">
+          <!-- Active Pipeline Banner -->
+          <div class="pipeline-banner" id="pipelineBanner">
+            <span class="banner-title" id="pipelineTitle">ACTIVE PIPELINE</span>
+            <span class="banner-meta" id="pipelineMeta">Records: 0</span>
+          </div>
+
+          <!-- KPI Cards Row -->
+          <div class="kpi-grid" id="kpiContainer"></div>
+
+          <!-- Section Label -->
+          <div class="charts-heading" id="chartSectionHeading">TELEMETRY ANALYTICS</div>
+
+          <!-- Charts Grid Row 1 -->
+          <div class="charts-row">
+            <div class="chart-card col-4" id="chartCard1">
+              <div id="chartPlot1"></div>
+            </div>
+            <div class="chart-card col-8" id="chartCard2">
+              <div id="chartPlot2"></div>
+            </div>
+          </div>
+
+          <!-- Charts Grid Row 2 -->
+          <div class="charts-row">
+            <div class="chart-card col-6" id="chartCard3">
+              <div id="chartPlot3"></div>
+            </div>
+            <div class="chart-card col-6" id="chartCard4">
+              <div id="chartPlot4"></div>
+            </div>
+          </div>
+
+          <!-- Charts Grid Row 3 -->
+          <div class="charts-row">
+            <div class="chart-card col-6" id="chartCard5">
+              <div id="chartPlot5"></div>
+            </div>
+            <div class="chart-card col-6" id="chartCard6">
+              <div id="chartPlot6"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Tab 2: Record Logs & Export -->
+      <section class="tab-content" id="tab-logs">
+        <div id="logsEmptyNotice" class="empty-state-box">
+          <div class="empty-state-title">No records loaded yet</div>
+          <div class="empty-state-text">Upload and analyze a dataset to inspect and filter raw telemetry logs.</div>
+        </div>
+        <div id="logsContent" style="display: none;">
+          <div class="table-filters" id="logsFilters"></div>
+          <div class="table-info" id="tableRecordCount">Showing 0 records</div>
+          <div class="table-wrapper">
+            <table class="data-table" id="dataTable">
+              <thead id="tableHead"></thead>
+              <tbody id="tableBody"></tbody>
+            </table>
+          </div>
+          <button class="btn btn-secondary" id="btnDownloadCSV" style="margin-top: 14px;">Download Filtered Telemetry (CSV)</button>
+        </div>
+      </section>
+
+      <!-- Tab 3: Ingestion History -->
+      <section class="tab-content" id="tab-history">
+        <div class="history-container">
+          <div class="section-label">Persistent Ingestion Audit Trail</div>
+          <div id="historyEmptyNotice" class="empty-state-box" style="margin-top: 12px;">
+            <div class="empty-state-title">No historical entries recorded yet</div>
+            <div class="empty-state-text">Each processed upload will automatically create an audit record here during this session.</div>
+          </div>
+          <div id="historyList" class="history-list"></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
