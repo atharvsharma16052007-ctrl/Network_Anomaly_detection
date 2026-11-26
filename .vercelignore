@@ -1,12 +1,11 @@
 # Ignore Python backend and heavy assets on Vercel static deployment
-app.py
-requirements.txt
-generate_deck.py
-generate_deck_styled.py
+streamlit_app.py
 *.py
+requirements.txt
 models/
 src/
 dataset/
 results/
 report/
 .streamlit/
+*.bat

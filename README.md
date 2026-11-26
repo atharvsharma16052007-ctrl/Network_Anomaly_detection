@@ -42,8 +42,10 @@ pip install -r requirements.txt
 
 ### 3️⃣ Launch the Netshield Console on Port 8501
 ```bash
-streamlit run app.py --server.port 8501
+streamlit run streamlit_app.py --server.port 8501
 ```
+*(Or on Windows, simply double-click `run_localhost_8501.bat`)*
+
 Open your browser and navigate to:
 👉 **[http://localhost:8501](http://localhost:8501)**
 
@@ -64,11 +66,13 @@ For client-side zero-python environments or Vercel deployments:
 
 ```
 network-anomaly-detection/
-├── app.py                         # Main Streamlit SOC Application (runs at localhost:8501)
-├── app.js                         # Web telemetry logic (mirrors app.py for browser execution)
+├── streamlit_app.py               # Main Streamlit SOC Application (runs at localhost:8501)
+├── run_localhost_8501.bat         # Windows one-click local launcher
+├── app.js                         # Web telemetry logic (mirrors streamlit_app.py for browser execution)
 ├── index.html                     # Standalone HTML5 dashboard
 ├── style.css                      # Tailwind-styled clean light corporate theme
 ├── vercel.json                    # Vercel deployment configuration
+├── .vercelignore                  # Vercel deployment ignore rules
 ├── requirements.txt               # Complete Python runtime dependencies
 ├── NETSHIELD_Presentation.pptx    # Official 10-slide SIH project presentation deck
 ├── SPEAKER_PREPARATION_GUIDE.md   # Comprehensive speaker prep & viva defense guide
