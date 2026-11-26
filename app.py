@@ -1941,3 +1941,17 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# ==============================================================================
+# Vercel Serverless Function Fallback Entrypoint
+# ==============================================================================
+def app(environ, start_response):
+    """Fallback WSGI entrypoint if Vercel serverless builder inspects app.py."""
+    status = '200 OK'
+    headers = [('Content-type', 'text/plain; charset=utf-8')]
+    start_response(status, headers)
+    return [b"Netshield Telemetry Engine is online."]
+
+handler = app
+application = app
+
