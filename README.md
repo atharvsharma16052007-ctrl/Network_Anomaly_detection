@@ -1,148 +1,114 @@
+# Netshield: AI-Driven Network Traffic Anomaly & Threat Detection System
 
-# Network Traffic Anomaly Detection using Machine Learning
+[![Streamlit](https://img.shields.io/badge/Streamlit-1.28+-FF4B4B.svg)](https://streamlit.io)
+[![Python](https://img.shields.io/badge/Python-3.10+-3776AB.svg)](https://python.org)
+[![Scikit-Learn](https://img.shields.io/badge/scikit--learn-1.0+-F7931E.svg)](https://scikit-learn.org)
+[![Tailwind CSS](https://img.shields.io/badge/UI-Tailwind%20CSS%20Light-06B6D4.svg)](https://tailwindcss.com)
 
-## 📌 Project Overview
-This project implements an AI-driven Network Traffic Anomaly Detection System designed to identify abnormal or suspicious network traffic. The system applies Machine Learning techniques to classify network activities as normal or anomalous, which is a key requirement in modern cyber security systems.
-
-This project is developed as part of an academic assignment focused on applying Artificial Intelligence (AI) and Machine Learning (ML) to real-world cyber security problems.
-
----
-
-## 🎯 Objectives
-- Detect anomalous patterns in network traffic
-- Apply AI/ML techniques to a cyber security use case
-- Build a complete end-to-end ML pipeline
-- Evaluate model performance using standard metrics
-- Provide a clean and understandable project structure
+**Netshield** is an enterprise-grade cyber telemetry inspection platform and network intrusion detection engine. Built for real-world Security Operations Centers (SOC) and Smart India Hackathon (SIH) demonstrations, Netshield provides multi-schema telemetry ingestion, deep packet inspection, volumetric flow analytics, and a **Two-Stage Threat Profiling Engine** that translates low-level anomalies into plain-English attack types, severity ratings, detection triggers, and mitigation playbooks.
 
 ---
 
-## 🧠 Problem Statement
-Traditional rule-based intrusion detection systems struggle to detect new and evolving cyber threats. This project uses Machine Learning models that learn from network traffic data to automatically detect anomalies that may indicate malicious activity.
+## 📌 Key Capabilities
+
+- **Zero-Preloaded Traffic Policy**: Operates in a clean state upon launch. Users dynamically ingest CSV captures via drag-and-drop or file selection.
+- **Two-Stage Threat Profiler**:
+  - **Stage 1 (Anomaly Detection)**: High-speed Random Forest and decision boundary models detect binary deviation from normal operational baselines.
+  - **Stage 2 (Threat Classification & Playbook)**: Evaluates TCP/IP flags, error rate signatures, volumetric packet metrics, and service targets to categorize threats into plain-English classifications (SYN Flood, Port Sweep, Slowloris, Host Compromise, Brute Force, etc.) with explicit severity ratings (`CRITICAL`, `HIGH`, `MEDIUM`, `NORMAL`).
+- **Interactive SOC Dashboards**:
+  - Donut distribution of threat severity ratings.
+  - Frequency distribution of identified attack vectors.
+  - Full tabular audit trail with search, sort, and CSV export.
+  - Session ingestion history tracking each analyzed dataset.
+  - Built-in Attack Types Reference Manual.
+- **Dual Deployment Architecture**:
+  - **Local Python/Streamlit Engine**: Runs natively on `http://localhost:8501`.
+  - **Client-Side Mirror Engine**: Standalone `index.html` + `app.js` configured for static zero-server hosting (e.g., Vercel).
 
 ---
 
-## Project Structure
-```
-network-anomaly-detection/
-│
-├── src/
-│   ├── 01_load_dataset.py
-│   ├── 02_encode_features.py
-│   ├── 03_scale_features.py
-│   ├── 04_split_data.py
-│   ├── 05_train_model.py
-│   ├── 06_evaluate_model.py
-│   ├── 07_save_model.py
-│   └── run_prediction.py
-│
-├── results/
-│   ├── confusion_matrix.png
-│   ├── roc_curve.png
-│   ├── evaluation_report.txt
-│   ├── evaluation_results.txt
-│   └── user_predictions.csv
-│
-├── models/
-│   └── network_anomaly_model.pkl   # Trained model
-│   └─  encoders.pkl                # Categorical feature encoders
-|   └─  scaler.pkl                  # Feature scaler
-|   └─  X_train.pkl, X_test.pkl    # Train/test features
-|   └─  y_train.pkl, y_test.pkl    # Train/test labels
-│── report/
-|   └── Report
-| 
-├── README.md
-└── requirements.txt
+## 🚀 Quick Start: Running on Localhost:8501
+
+### 1️⃣ Clone the Repository
+```bash
+git clone https://github.com/atharvsharma16052007-ctrl/Network_Anomaly_detection.git
+cd Network_Anomaly_detection
 ```
 
----
-
-## 🔄 Workflow Pipeline
-1. Load raw network traffic dataset  
-2. Encode categorical features  
-3. Scale numerical features  
-4. Split data into training and testing sets  
-5. Train a machine learning model  
-6. Evaluate model performance  
-7. Save the trained model  
-8. Predict anomalies on new data  
-
----
-
-## 🤖 Machine Learning Model
-- Type: Supervised Learning
-- Task: Network Classification (Normal vs Anomaly)
-- Libraries Used:
-  - Python
-  - Pandas
-  - NumPy
-  - Scikit-learn
-  - Matplotlib
-
----
-
-## 📊 Evaluation Metrics
-- Accuracy
-- Precision
-- Recall
-- F1-Score
-- Confusion Matrix
-- ROC Curve
-
-All evaluation outputs are stored in the `results/` directory.
-
----
-
-## ⚙️ How to Run the Project
-
-### 1️⃣ Install Dependencies
-
-python -m venv venv
-venv\Scripts\activate
+### 2️⃣ Install Required Dependencies
+```bash
 pip install -r requirements.txt
 ```
 
-### 2️⃣ Run the Complete Pipeline
-Run the scripts in order:   [Devloper Side] #Only run once 
+### 3️⃣ Launch the Netshield Console on Port 8501
+```bash
+streamlit run app.py --server.port 8501
 ```
-python src/01_load_dataset.py
-python src/02_encode_features.py
-python src/03_scale_features.py
-python src/04_split_data.py
-python src/05_train_model.py
-python src/06_evaluate_model.py
-python src/07_save_model.py
-```
+Open your browser and navigate to:
+👉 **[http://localhost:8501](http://localhost:8501)**
 
-### 3️⃣ Run Prediction on New Data/ 
-User csv file   #csv file should contain all 41 feature as like main-dataset excluding: label no worry about order of columns 
-User will save its input csv in dataset folder where the user prediction script will take and generate new user_prediction.csv file as output.
-User can evalaute its result through the trained model named: network_anamoly_model.pkl and you can evlaute it through 06 script and see the output which will come in results folder.
+---
+
+## 🌐 Alternative: Running the Static Web Mirror
+
+For client-side zero-python environments or Vercel deployments:
+1. Open `index.html` directly in any web browser, or serve it with any static HTTP server:
+   ```bash
+   npx serve .
+   ```
+2. The web frontend identically mirrors the `localhost:8501` Python application using pure browser-based parsing and Plotly.js charts.
+
+---
+
+## 📂 Project Architecture
+
 ```
-python src/run_prediction.py
+network-anomaly-detection/
+├── app.py                         # Main Streamlit SOC Application (runs at localhost:8501)
+├── app.js                         # Web telemetry logic (mirrors app.py for browser execution)
+├── index.html                     # Standalone HTML5 dashboard
+├── style.css                      # Tailwind-styled clean light corporate theme
+├── vercel.json                    # Vercel deployment configuration
+├── requirements.txt               # Complete Python runtime dependencies
+├── NETSHIELD_Presentation.pptx    # Official 10-slide SIH project presentation deck
+├── SPEAKER_PREPARATION_GUIDE.md   # Comprehensive speaker prep & viva defense guide
+├── frontend/                      # Standalone web mirror bundle
+│   ├── index.html
+│   ├── app.js
+│   └── style.css
+├── models/                        # Serialized ML models & preprocessors
+│   ├── network_anomaly_model.pkl  # Trained Random Forest classifier
+│   ├── encoders.pkl               # Protocol & service categorical encoders
+│   └── scaler.pkl                 # Robust feature standard scaler
+├── dataset/                       # Sample telemetry CSVs for live demonstration
+│   ├── sample_traffic.csv         # Standard test packet telemetry
+│   ├── user_test_input.csv        # Custom test input file
+│   └── Global_Cybersecurity_Threats_2015-2024.csv
+└── results/                       # Model evaluation benchmarks & confusion matrix
 ```
 
 ---
 
-## 🛡️ Cyber Security Application
-This project can be used as:
-- Network Intrusion Detection System (IDS)
-- Traffic monitoring tool
-- Foundation for advanced cyber threat detection systems
+## 🧠 Two-Stage Threat Profiling Specification
+
+When an anomaly is flagged by the machine learning model, Netshield initiates secondary heuristic rule mapping:
+
+| Attack Vector | Heuristic Profile Triggers | Threat Severity | Immediate Mitigation Action |
+| :--- | :--- | :--- | :--- |
+| **SYN Flood (DoS)** | Flag `S0` + `serror_rate > 0.5` + High connection count | 🔴 **CRITICAL** | Rate-limit SYN packets; enable TCP SYN cookies; drop attacking IP at edge firewall. |
+| **Port Sweep / Recon** | `dst_host_diff_srv_rate > 0.5` + Multi-port probing | 🟠 **HIGH** | Temporarily block source IP; enforce stealth port filtering; alert SOC analysts. |
+| **Slowloris Connection Starvation** | Session duration > 100s + `dst_bytes < 50` | 🟠 **HIGH** | Enforce aggressive HTTP keep-alive timeouts; limit connections per client IP. |
+| **Privilege Escalation (U2R)** | `root_shell > 0` or `su_attempted > 0` or compromised count | 🔴 **CRITICAL** | Immediately quarantine host; terminate unauthorized shells; rotate root credentials. |
+| **Brute Force Infiltration** | `num_failed_logins >= 2` or guest login anomaly | 🟡 **MEDIUM** | Trigger exponential authentication backoff; enforce MFA; isolate target daemon. |
 
 ---
 
-## 📚 Learning Outcomes
-- Practical application of AI in cyber security
-- Understanding of anomaly detection techniques
-- Experience with full ML lifecycle
-- Model evaluation and result analysis
+## 🎤 Presentation & Speaker Resources
+
+- **Presentation Deck**: Download the 10-slide 16:9 widescreen presentation deck: [`NETSHIELD_Presentation.pptx`](./NETSHIELD_Presentation.pptx)
+- **Speaker Preparation & Q&A Defense Guide**: Detailed slide-by-slide speaker scripts, technical deep dives, and answers to expected evaluator questions: [`SPEAKER_PREPARATION_GUIDE.md`](./SPEAKER_PREPARATION_GUIDE.md)
 
 ---
 
-
-## ✅ Project Status
-✔ Fully implemented  
-✔ End-to-end pipeline working  
-✔ Ready for evaluation  
+## 📄 License
+This project is open-source under the MIT License for educational and Smart India Hackathon (SIH) research purposes.
