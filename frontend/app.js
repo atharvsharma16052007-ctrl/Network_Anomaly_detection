@@ -5,18 +5,43 @@ let currentDataset = null;
 let currentMode = null; // 'PACKET', 'FLOW', or 'INCIDENT'
 let ingestionHistory = [];
 let rawCSVData = [];
+let stagedFile = null;
+let stagedRawData = [];
 
 // DOM Elements
-const dropzone = document.getElementById('dropzone');
-const fileInput = document.getElementById('fileInput');
-const fileNameDisplay = document.getElementById('fileNameDisplay');
-const btnProcess = document.getElementById('btnProcess');
-const sampleLimit = document.getElementById('sampleLimit');
-const fileUploadFeedback = document.getElementById('fileUploadFeedback');
-const fileInfoText = document.getElementById('fileInfoText');
-const fileSubDisplay = document.getElementById('fileSubDisplay');
+const ingestDropzone = document.getElementById('ingestDropzone');
+const ingestFileInput = document.getElementById('ingestFileInput');
+const btnBrowseFile = document.getElementById('btnBrowseFile');
 
-const emptyState = document.getElementById('emptyState');
+const stagedFileCard = document.getElementById('stagedFileCard');
+const stagedFileMeta = document.getElementById('stagedFileMeta');
+const stagedPreviewContainer = document.getElementById('stagedPreviewContainer');
+const btnExecuteIngest = document.getElementById('btnExecuteIngest');
+const btnRemoveStagedFile = document.getElementById('btnRemoveStagedFile');
+
+const activeDatasetCard = document.getElementById('activeDatasetCard');
+const activeDatasetName = document.getElementById('activeDatasetName');
+const activeDatasetLatency = document.getElementById('activeDatasetLatency');
+const activeCardRecords = document.getElementById('activeCardRecords');
+const activeCardMode = document.getElementById('activeCardMode');
+const activeCardAnomalies = document.getElementById('activeCardAnomalies');
+const activeCardRatio = document.getElementById('activeCardRatio');
+const btnGoAnalytics = document.getElementById('btnGoAnalytics');
+const btnRemoveActiveDataset = document.getElementById('btnRemoveActiveDataset');
+
+const analyticsEmptyState = document.getElementById('analyticsEmptyState');
+const btnGoToIngestion = document.getElementById('btnGoToIngestion');
+const topActiveFileName = document.getElementById('topActiveFileName');
+const topActiveFileMeta = document.getElementById('topActiveFileMeta');
+const btnAnalyticsRemoveTop = document.getElementById('btnAnalyticsRemoveTop');
+
+const sidebarNoDataNotice = document.getElementById('sidebarNoDataNotice');
+const sidebarActiveBox = document.getElementById('sidebarActiveBox');
+const sidebarFileName = document.getElementById('sidebarFileName');
+const sidebarFileMeta = document.getElementById('sidebarFileMeta');
+const btnSidebarRemoveFile = document.getElementById('btnSidebarRemoveFile');
+const sampleLimit = document.getElementById('sampleLimit');
+
 const telemetryView = document.getElementById('telemetryView');
 const pipelineTitle = document.getElementById('pipelineTitle');
 const pipelineMeta = document.getElementById('pipelineMeta');
@@ -29,112 +54,36 @@ const tabHistoryBtn = document.getElementById('tabHistoryBtn');
 const historyList = document.getElementById('historyList');
 const historyEmptyNotice = document.getElementById('historyEmptyNotice');
 
-const btnClearData = document.getElementById('btnClearData');
-if (btnClearData) {
-  btnClearData.addEventListener('click', () => {
-    currentDataset = null;
-    currentMode = null;
-    rawCSVData = [];
-    if (fileNameDisplay) fileNameDisplay.textContent = 'Upload CSV File';
-    if (fileSubDisplay) fileSubDisplay.textContent = 'Drag and drop or click to browse';
-    fileInput.value = '';
-    if (fileUploadFeedback) fileUploadFeedback.style.display = 'none';
-    emptyState.style.display = 'block';
-    telemetryView.style.display = 'none';
-    const logsContent = document.getElementById('logsContent');
-    const logsEmpty = document.getElementById('logsEmptyNotice');
-    if (logsContent) logsContent.style.display = 'none';
-    if (logsEmpty) logsEmpty.style.display = 'block';
+// Tab Navigation Function
+function switchTab(tabId) {
+  tabButtons.forEach(btn => {
+    if (btn.getAttribute('data-tab') === tabId) btn.classList.add('active');
+    else btn.classList.remove('active');
+  });
+  tabContents.forEach(sec => {
+    if (sec.id === tabId) sec.classList.add('active');
+    else sec.classList.remove('active');
   });
 }
 
-// Tab Navigation
 tabButtons.forEach(btn => {
   btn.addEventListener('click', () => {
-    tabButtons.forEach(b => b.classList.remove('active'));
-    tabContents.forEach(c => c.classList.remove('active'));
-    btn.classList.add('active');
     const tabId = btn.getAttribute('data-tab');
-    const targetContent = document.getElementById(tabId);
-    if (targetContent) targetContent.classList.add('active');
+    switchTab(tabId);
   });
 });
 
-function handleFileSelection(file) {
+if (btnGoAnalytics) {
+  btnGoAnalytics.addEventListener('click', () => switchTab('tab-analytics'));
+}
+
+if (btnGoToIngestion) {
+  btnGoToIngestion.addEventListener('click', () => switchTab('tab-ingestion'));
+}
+
+// Staging & Ingestion Handling
+function handleFileStaging(file) {
   if (!file) return;
-  const sizeKb = (file.size / 1024).toFixed(1);
-  if (fileNameDisplay) fileNameDisplay.textContent = file.name;
-  if (fileSubDisplay) fileSubDisplay.textContent = `${sizeKb} KB - Parsing & Ingesting...`;
-  if (fileUploadFeedback && fileInfoText) {
-    fileInfoText.textContent = `${file.name} (${sizeKb} KB) - Analyzing...`;
-    fileUploadFeedback.style.display = 'block';
-  }
-  readCSVFile(file);
-}
-
-const centerFileInput = document.getElementById('centerFileInput');
-
-// Central Dropzone Event Handlers (User can click or drag & drop directly on the main central card)
-if (emptyState) {
-  emptyState.addEventListener('click', () => {
-    if (centerFileInput) centerFileInput.click();
-    else if (fileInput) fileInput.click();
-  });
-  emptyState.addEventListener('dragover', (e) => {
-    e.preventDefault();
-    emptyState.style.borderColor = '#2563eb';
-    emptyState.style.backgroundColor = '#eff6ff';
-  });
-  emptyState.addEventListener('dragleave', () => {
-    emptyState.style.borderColor = '#cbd5e1';
-    emptyState.style.backgroundColor = '#ffffff';
-  });
-  emptyState.addEventListener('drop', (e) => {
-    e.preventDefault();
-    emptyState.style.borderColor = '#cbd5e1';
-    emptyState.style.backgroundColor = '#ffffff';
-    if (e.dataTransfer && e.dataTransfer.files.length > 0) {
-      handleFileSelection(e.dataTransfer.files[0]);
-    }
-  });
-}
-
-if (centerFileInput) {
-  centerFileInput.addEventListener('change', (e) => {
-    if (e.target.files && e.target.files.length > 0) {
-      handleFileSelection(e.target.files[0]);
-    }
-  });
-}
-
-// File Drag & Drop (Sidebar)
-if (dropzone) {
-  dropzone.addEventListener('click', () => fileInput.click());
-  dropzone.addEventListener('dragover', (e) => {
-    e.preventDefault();
-    dropzone.style.borderColor = '#2563eb';
-  });
-  dropzone.addEventListener('dragleave', () => {
-    dropzone.style.borderColor = '#cbd5e1';
-  });
-  dropzone.addEventListener('drop', (e) => {
-    e.preventDefault();
-    dropzone.style.borderColor = '#cbd5e1';
-    if (e.dataTransfer && e.dataTransfer.files.length > 0) {
-      handleFileSelection(e.dataTransfer.files[0]);
-    }
-  });
-}
-
-if (fileInput) {
-  fileInput.addEventListener('change', (e) => {
-    if (e.target.files && e.target.files.length > 0) {
-      handleFileSelection(e.target.files[0]);
-    }
-  });
-}
-
-function readCSVFile(file) {
   Papa.parse(file, {
     header: true,
     dynamicTyping: true,
@@ -144,17 +93,39 @@ function readCSVFile(file) {
         alert('The uploaded CSV file contains no valid rows.');
         return;
       }
-      rawCSVData = results.data;
-      currentDataset = file.name;
+      stagedFile = file;
+      stagedRawData = results.data;
       const sizeKb = (file.size / 1024).toFixed(1);
-      if (fileNameDisplay) fileNameDisplay.textContent = file.name;
-      if (fileSubDisplay) fileSubDisplay.textContent = `${sizeKb} KB (${results.data.length.toLocaleString()} rows) - Ingested`;
-      if (fileUploadFeedback && fileInfoText) {
-        fileInfoText.textContent = `${file.name} (${sizeKb} KB, ${results.data.length.toLocaleString()} rows)`;
-        fileUploadFeedback.style.display = 'block';
+      const cols = Object.keys(results.data[0]);
+
+      if (stagedFileMeta) {
+        stagedFileMeta.innerHTML = `<b>${file.name}</b> • ${sizeKb} KB • Detected ${cols.length} columns • ${results.data.length.toLocaleString()} total records`;
       }
-      // AUTO-PROCESS IMMEDIATELY SO DASHBOARD UPDATES UPON FILE SELECTION
-      processDataset(rawCSVData, file.name);
+
+      // Render table preview of first 5 rows
+      if (stagedPreviewContainer) {
+        let previewHtml = '<table class="data-table" style="font-size: 11px; margin: 0; width: 100%;"><thead><tr>';
+        cols.slice(0, 10).forEach(c => {
+          previewHtml += `<th>${c}</th>`;
+        });
+        if (cols.length > 10) previewHtml += '<th>...</th>';
+        previewHtml += '</tr></thead><tbody>';
+        results.data.slice(0, 5).forEach(row => {
+          previewHtml += '<tr>';
+          cols.slice(0, 10).forEach(c => {
+            const val = row[c] !== null && row[c] !== undefined ? row[c] : '';
+            previewHtml += `<td>${val}</td>`;
+          });
+          if (cols.length > 10) previewHtml += '<td>...</td>';
+          previewHtml += '</tr>';
+        });
+        previewHtml += '</tbody></table>';
+        stagedPreviewContainer.innerHTML = previewHtml;
+      }
+
+      if (ingestDropzone) ingestDropzone.style.display = 'none';
+      if (stagedFileCard) stagedFileCard.style.display = 'block';
+      if (activeDatasetCard) activeDatasetCard.style.display = 'none';
     },
     error: function(err) {
       alert('Error parsing CSV file: ' + err.message);
@@ -162,16 +133,80 @@ function readCSVFile(file) {
   });
 }
 
-// Ingestion Trigger
-if (btnProcess) {
-  btnProcess.addEventListener('click', () => {
-    if (!rawCSVData || rawCSVData.length === 0) {
+// Ingestion Dropzone Events
+if (ingestDropzone) {
+  ingestDropzone.addEventListener('click', () => {
+    if (ingestFileInput) ingestFileInput.click();
+  });
+  ingestDropzone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    ingestDropzone.style.borderColor = '#2563eb';
+    ingestDropzone.style.backgroundColor = '#eff6ff';
+  });
+  ingestDropzone.addEventListener('dragleave', () => {
+    ingestDropzone.style.borderColor = '#cbd5e1';
+    ingestDropzone.style.backgroundColor = '#ffffff';
+  });
+  ingestDropzone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    ingestDropzone.style.borderColor = '#cbd5e1';
+    ingestDropzone.style.backgroundColor = '#ffffff';
+    if (e.dataTransfer && e.dataTransfer.files.length > 0) {
+      handleFileStaging(e.dataTransfer.files[0]);
+    }
+  });
+}
+
+if (ingestFileInput) {
+  ingestFileInput.addEventListener('change', (e) => {
+    if (e.target.files && e.target.files.length > 0) {
+      handleFileStaging(e.target.files[0]);
+    }
+  });
+}
+
+// Execute Ingestion ONLY when button is pressed
+if (btnExecuteIngest) {
+  btnExecuteIngest.addEventListener('click', () => {
+    if (!stagedRawData || stagedRawData.length === 0 || !stagedFile) {
       alert('Please upload a CSV file first.');
       return;
     }
-    processDataset(rawCSVData, currentDataset || 'uploaded_data.csv');
+    processDataset(stagedRawData, stagedFile.name);
   });
 }
+
+// Reset / Remove Current File Functions
+function resetAllData() {
+  currentDataset = null;
+  currentMode = null;
+  rawCSVData = [];
+  stagedFile = null;
+  stagedRawData = [];
+
+  if (ingestFileInput) ingestFileInput.value = '';
+  if (ingestDropzone) ingestDropzone.style.display = 'block';
+  if (stagedFileCard) stagedFileCard.style.display = 'none';
+  if (activeDatasetCard) activeDatasetCard.style.display = 'none';
+
+  if (analyticsEmptyState) analyticsEmptyState.style.display = 'block';
+  if (telemetryView) telemetryView.style.display = 'none';
+
+  if (sidebarNoDataNotice) sidebarNoDataNotice.style.display = 'block';
+  if (sidebarActiveBox) sidebarActiveBox.style.display = 'none';
+
+  const logsContent = document.getElementById('logsContent');
+  const logsEmpty = document.getElementById('logsEmptyNotice');
+  if (logsContent) logsContent.style.display = 'none';
+  if (logsEmpty) logsEmpty.style.display = 'block';
+
+  switchTab('tab-ingestion');
+}
+
+if (btnRemoveStagedFile) btnRemoveStagedFile.addEventListener('click', resetAllData);
+if (btnRemoveActiveDataset) btnRemoveActiveDataset.addEventListener('click', resetAllData);
+if (btnAnalyticsRemoveTop) btnAnalyticsRemoveTop.addEventListener('click', resetAllData);
+if (btnSidebarRemoveFile) btnSidebarRemoveFile.addEventListener('click', resetAllData);
 
 // Detect Schema
 function detectSchema(data) {
@@ -439,8 +474,26 @@ function processDataset(data, fileName) {
   updateHistoryUI();
 
   // Render Views
-  emptyState.style.display = 'none';
-  telemetryView.style.display = 'block';
+  if (stagedFileCard) stagedFileCard.style.display = 'none';
+  if (activeDatasetCard) activeDatasetCard.style.display = 'block';
+  if (activeDatasetName) activeDatasetName.textContent = fileName;
+  if (activeDatasetLatency) activeDatasetLatency.innerHTML = `Processing Latency: <b>${durationMs.toFixed(1)} ms</b>`;
+  if (activeCardRecords) activeCardRecords.textContent = processedRows.length.toLocaleString();
+  if (activeCardMode) activeCardMode.textContent = schema;
+  if (activeCardAnomalies) activeCardAnomalies.textContent = anomalyCount.toLocaleString();
+  if (activeCardRatio) activeCardRatio.textContent = ((anomalyCount / processedRows.length) * 100).toFixed(1) + '%';
+
+  if (sidebarNoDataNotice) sidebarNoDataNotice.style.display = 'none';
+  if (sidebarActiveBox) sidebarActiveBox.style.display = 'block';
+  if (sidebarFileName) sidebarFileName.textContent = fileName;
+  if (sidebarFileMeta) sidebarFileMeta.textContent = `${processedRows.length.toLocaleString()} rows • ${schema}`;
+
+  if (topActiveFileName) topActiveFileName.textContent = fileName;
+  if (topActiveFileMeta) topActiveFileMeta.textContent = `(${processedRows.length.toLocaleString()} records • ${schema} mode)`;
+
+  if (analyticsEmptyState) analyticsEmptyState.style.display = 'none';
+  if (telemetryView) telemetryView.style.display = 'block';
+  switchTab('tab-analytics');
 
   renderBanner(schema, fileName, processedRows.length);
   try { renderKPIs(schema, processedRows, normalCount, anomalyCount, durationMs); } catch (e) { console.error('KPI error:', e); }

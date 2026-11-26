@@ -28,16 +28,13 @@
         <span class="sidebar-brand-name">Netshield</span>
       </div>
 
-      <div class="section-label">Upload Cyber Dataset</div>
-      <div class="file-dropzone" id="dropzone">
-        <input type="file" id="fileInput" accept=".csv" />
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-          <polyline points="17 8 12 3 7 8"/>
-          <line x1="12" y1="3" x2="12" y2="15"/>
-        </svg>
-        <div class="drop-text" id="fileNameDisplay">Upload CSV File</div>
-        <div class="drop-sub" id="fileSubDisplay">Drag and drop or click to browse</div>
+      <div class="section-label">TELEMETRY ENGINE STATUS</div>
+      <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; padding: 10px 12px; margin-bottom: 14px;">
+        <div style="display: flex; align-items: center; gap: 6px;">
+          <span style="width: 8px; height: 8px; border-radius: 50%; background-color: #16a34a; display: inline-block;"></span>
+          <span style="font-size: 12px; font-weight: 700; color: #166534;">Online &amp; Operational</span>
+        </div>
+        <div style="font-size: 11px; color: #15803d; margin-top: 2px;">Dual ML Pipeline Ready</div>
       </div>
 
       <div class="form-group">
@@ -53,16 +50,19 @@
 
       <hr class="sidebar-divider" />
 
-      <div style="display: grid; grid-template-columns: 3fr 2fr; gap: 8px;">
-        <button class="btn btn-primary" id="btnProcess">Process & Ingest</button>
-        <button class="btn btn-secondary" id="btnClearData">Clear Data</button>
-      </div>
+      <!-- Active File State in Sidebar -->
+      <div id="sidebarDatasetBox">
+        <div id="sidebarNoDataNotice" style="background-color: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 6px; padding: 10px 12px; margin-bottom: 12px; text-align: center;">
+          <div style="font-size: 11px; font-weight: 600; color: #64748b;">No Active Dataset</div>
+          <div style="font-size: 10px; color: #94a3b8; margin-top: 2px;">Use Data Ingestion tab to load CSV files</div>
+        </div>
 
-      <!-- File Upload Feedback -->
-      <div id="fileUploadFeedback" style="display: none; background-color: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; padding: 10px 14px; margin: 8px 0;">
-        <div style="font-size: 12px; font-weight: 600; color: #1e40af;">File Ready</div>
-        <div id="fileInfoText" style="font-size: 11px; color: #334155; margin-top: 2px;"></div>
-        <div style="font-size: 11px; color: #64748b; margin-top: 2px;">Click <strong>Process &amp; Ingest</strong> to analyze</div>
+        <div id="sidebarActiveBox" style="display: none; background-color: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; padding: 10px 12px; margin-bottom: 12px;">
+          <div style="font-size: 10px; font-weight: 700; color: #1e40af; text-transform: uppercase;">Active Ingested Dataset</div>
+          <div id="sidebarFileName" style="font-size: 12px; font-weight: 600; color: #0f172a; margin-top: 2px; word-break: break-all;"></div>
+          <div id="sidebarFileMeta" style="font-size: 11px; color: #3b82f6; margin-top: 2px;"></div>
+          <button class="btn btn-outline" id="btnSidebarRemoveFile" style="width: 100%; margin-top: 8px; font-size: 11px; padding: 5px 8px; color: #dc2626; border-color: #fca5a5;">🗑️ Remove Current File</button>
+        </div>
       </div>
 
       <!-- Engine Specs Badge -->
@@ -100,31 +100,140 @@
 
       <!-- Tabs Navigation -->
       <div class="tabs-bar">
-        <button class="tab-button active" data-tab="tab-analytics">Threat & Telemetry Analytics</button>
-        <button class="tab-button" data-tab="tab-logs">Record Logs & Export</button>
-        <button class="tab-button" data-tab="tab-history" id="tabHistoryBtn">Ingestion History (0)</button>
-        <button class="tab-button" data-tab="tab-manual">Attack Types Manual</button>
+        <button class="tab-button active" data-tab="tab-ingestion">📁 Data Ingestion &amp; File Hub</button>
+        <button class="tab-button" data-tab="tab-analytics">📊 Threat &amp; Telemetry Analytics</button>
+        <button class="tab-button" data-tab="tab-logs">📋 Record Logs &amp; Export</button>
+        <button class="tab-button" data-tab="tab-history" id="tabHistoryBtn">⏱️ Ingestion History (0)</button>
+        <button class="tab-button" data-tab="tab-manual">📖 Attack Types Manual</button>
       </div>
 
-      <!-- Tab 1: Threat & Telemetry Analytics -->
-      <section class="tab-content active" id="tab-analytics">
-        <!-- Empty State (Interactive Central Dropzone) -->
-        <div class="empty-state-box" id="emptyState" style="cursor: pointer; transition: all 0.2s ease;">
-          <input type="file" id="centerFileInput" accept=".csv" style="display: none;" />
+      <!-- Tab 1: Data Ingestion & File Hub (Dedicated Space) -->
+      <section class="tab-content active" id="tab-ingestion">
+        <div style="margin-bottom: 16px;">
+          <div style="font-size: 16px; font-weight: 700; color: #0f172a;">Telemetry Ingestion &amp; Dataset Workspace</div>
+          <div style="font-size: 12px; color: #64748b; margin-top: 2px;">
+            Dedicated secure ingestion hub. Attach network captures, inspect column parameters, and execute AI anomaly detection on demand.
+          </div>
+        </div>
+
+        <!-- Ingestion Dropzone (Shown when no file attached or ingested) -->
+        <div class="empty-state-box" id="ingestDropzone" style="cursor: pointer; transition: all 0.2s ease;">
+          <input type="file" id="ingestFileInput" accept=".csv" style="display: none;" />
           <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="margin: 0 auto 8px auto;">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
             <polyline points="17 8 12 3 7 8"/>
             <line x1="12" y1="3" x2="12" y2="15"/>
           </svg>
-          <div class="empty-state-title" id="centerBoxTitle" style="font-size: 17px; font-weight: 700; color: #0f172a;">Click or Drag &amp; Drop CSV File Here</div>
-          <div class="empty-state-text" id="centerBoxText" style="margin-top: 6px;">
-            Upload any network traffic capture, flow telemetry, or threat breach log CSV directly here to inspect records and run ML anomaly detection.
+          <div class="empty-state-title" style="font-size: 17px; font-weight: 700; color: #0f172a;">Select or Drag &amp; Drop CSV File Here</div>
+          <div class="empty-state-text" style="margin-top: 6px;">
+            Upload any network packet capture, flow telemetry, or threat breach CSV log to stage parameters and execute machine learning anomaly detection.
           </div>
-          <button class="btn btn-primary" id="btnCenterBrowse" style="margin-top: 14px; pointer-events: none;">Browse CSV File</button>
+          <button class="btn btn-primary" id="btnBrowseFile" style="margin-top: 14px; pointer-events: none;">Browse CSV File</button>
+        </div>
+
+        <!-- Staged File Card (Shown when file is selected but NOT yet ingested) -->
+        <div id="stagedFileCard" style="display: none; background-color: #f0fdf4; border: 1px solid #86efac; border-radius: 8px; padding: 18px; margin: 14px 0;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <div style="font-size: 15px; font-weight: 700; color: #166534;">✓ File Attached &amp; Ready for Ingestion</div>
+              <div id="stagedFileMeta" style="font-size: 12px; color: #334155; margin-top: 4px;"></div>
+            </div>
+            <span style="background-color: #dcfce7; color: #15803d; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 9999px;">READY TO INGEST</span>
+          </div>
+
+          <!-- Preview Table -->
+          <div style="margin-top: 14px;">
+            <div style="font-size: 12px; font-weight: 600; color: #0f172a; margin-bottom: 6px;">Raw Data Preview (First 5 Rows):</div>
+            <div id="stagedPreviewContainer" style="overflow-x: auto; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px; max-height: 220px;"></div>
+          </div>
+
+          <!-- Action Buttons -->
+          <div style="display: flex; gap: 12px; margin-top: 16px;">
+            <button class="btn btn-primary" id="btnExecuteIngest" style="font-size: 13px; padding: 10px 20px;">🚀 Ingest &amp; Run Telemetry Analysis</button>
+            <button class="btn btn-outline" id="btnRemoveStagedFile" style="font-size: 13px; padding: 10px 16px; color: #dc2626; border-color: #fca5a5;">🗑️ Remove Attached File</button>
+          </div>
+        </div>
+
+        <!-- Active Dataset Card (Shown when dataset is currently active) -->
+        <div id="activeDatasetCard" style="display: none; background-color: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 18px; margin: 14px 0;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="background-color: #dcfce7; color: #166534; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 9999px;">CURRENTLY INGESTED</span>
+              <span id="activeDatasetName" style="font-size: 16px; font-weight: 700; color: #0f172a;"></span>
+            </div>
+            <span id="activeDatasetLatency" style="font-size: 12px; color: #64748b;"></span>
+          </div>
+
+          <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px;">
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px;">
+              <div style="font-size: 11px; color: #64748b;">Ingested Records</div>
+              <div id="activeCardRecords" style="font-size: 18px; font-weight: 700; color: #0f172a;">0</div>
+            </div>
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px;">
+              <div style="font-size: 11px; color: #64748b;">Telemetry Mode</div>
+              <div id="activeCardMode" style="font-size: 18px; font-weight: 700; color: #2563eb;">-</div>
+            </div>
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px;">
+              <div style="font-size: 11px; color: #64748b;">Anomalies Detected</div>
+              <div id="activeCardAnomalies" style="font-size: 18px; font-weight: 700; color: #dc2626;">0</div>
+            </div>
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px;">
+              <div style="font-size: 11px; color: #64748b;">Threat Ratio</div>
+              <div id="activeCardRatio" style="font-size: 18px; font-weight: 700; color: #f59e0b;">0.0%</div>
+            </div>
+          </div>
+
+          <div style="display: flex; gap: 12px;">
+            <button class="btn btn-primary" id="btnGoAnalytics">📊 View Telemetry &amp; Results</button>
+            <button class="btn btn-outline" id="btnRemoveActiveDataset" style="color: #dc2626; border-color: #fca5a5;">🗑️ Remove Current File &amp; Ingest Another</button>
+          </div>
+        </div>
+
+        <!-- Format Guide Cards -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-top: 18px;">
+          <div style="background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px;">
+            <div style="font-size: 12px; font-weight: 700; color: #2563eb; margin-bottom: 4px;">Deep Packet Inspection</div>
+            <div style="font-size: 11px; color: #64748b; line-height: 1.5;">Evaluates 41 connection features: protocol type, service, TCP flags, byte volume, and error rates.</div>
+          </div>
+          <div style="background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px;">
+            <div style="font-size: 12px; font-weight: 700; color: #059669; margin-bottom: 4px;">Network Flow Telemetry</div>
+            <div style="font-size: 11px; color: #64748b; line-height: 1.5;">Evaluates 79 volumetric flow features: packet inter-arrival times, payload sizes, and flow durations.</div>
+          </div>
+          <div style="background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px;">
+            <div style="font-size: 12px; font-weight: 700; color: #7c3aed; margin-bottom: 4px;">Threat Incident Auditing</div>
+            <div style="font-size: 11px; color: #64748b; line-height: 1.5;">Parses enterprise cyber breach logs: vector categorization, financial impact, and resolution timeline.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Tab 2: Threat & Telemetry Analytics -->
+      <section class="tab-content" id="tab-analytics">
+        <!-- Empty State Notice -->
+        <div class="empty-state-box" id="analyticsEmptyState">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="margin: 0 auto 12px auto;">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="8" x2="12" y2="12"/>
+            <line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+          <div class="empty-state-title" style="font-size: 17px; font-weight: 700; color: #0f172a; margin-bottom: 6px;">No Telemetry Dataset Ingested Yet</div>
+          <div class="empty-state-text" style="max-width: 520px; margin: 0 auto 16px auto;">
+            Please navigate to the <b>'📁 Data Ingestion &amp; File Hub'</b> tab, attach your CSV dataset, and click <b>'🚀 Ingest &amp; Run Telemetry Analysis'</b> to generate real-time metrics, risk distribution, and threat classification.
+          </div>
+          <button class="btn btn-primary" id="btnGoToIngestion">👉 Go to Data Ingestion Space</button>
         </div>
 
         <!-- Populated Telemetry View -->
         <div id="telemetryView" style="display: none;">
+          <!-- Active File Top Bar -->
+          <div style="display: flex; align-items: center; justify-content: space-between; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px 16px; margin-bottom: 14px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 13px; font-weight: 700; color: #0f172a;">Active File:</span>
+              <span id="topActiveFileName" style="font-size: 13px; font-weight: 600; color: #2563eb; background: #eff6ff; padding: 2px 8px; border-radius: 4px;"></span>
+              <span id="topActiveFileMeta" style="font-size: 12px; color: #64748b;"></span>
+            </div>
+            <button class="btn btn-sm btn-outline" id="btnAnalyticsRemoveTop" style="color: #dc2626; border-color: #fca5a5;">🗑️ Remove File &amp; Ingest Another</button>
+          </div>
+
           <!-- Active Pipeline Banner -->
           <div class="pipeline-banner" id="pipelineBanner">
             <span class="banner-title" id="pipelineTitle">ACTIVE PIPELINE</span>
@@ -169,11 +278,11 @@
         </div>
       </section>
 
-      <!-- Tab 2: Record Logs & Export -->
+      <!-- Tab 3: Record Logs & Export -->
       <section class="tab-content" id="tab-logs">
         <div id="logsEmptyNotice" class="empty-state-box">
           <div class="empty-state-title">No records loaded yet</div>
-          <div class="empty-state-text">Upload and analyze a dataset to inspect and filter raw telemetry logs.</div>
+          <div class="empty-state-text">Please ingest a CSV dataset in the '📁 Data Ingestion &amp; File Hub' tab to inspect and export logs.</div>
         </div>
         <div id="logsContent" style="display: none;">
           <div class="table-filters" id="logsFilters"></div>
@@ -188,7 +297,7 @@
         </div>
       </section>
 
-      <!-- Tab 3: Ingestion History -->
+      <!-- Tab 4: Ingestion History -->
       <section class="tab-content" id="tab-history">
         <div class="history-container">
           <div class="section-label">Persistent Ingestion Audit Trail</div>
@@ -200,7 +309,7 @@
         </div>
       </section>
 
-      <!-- Tab 4: Attack Types Manual -->
+      <!-- Tab 5: Attack Types Manual -->
       <section class="tab-content" id="tab-manual">
         <div style="font-size: 12px; font-weight: 700; letter-spacing: 0.05em; color: #64748b; text-transform: uppercase; margin: 10px 0;">COMPREHENSIVE CYBER ATTACK TYPES REFERENCE MANUAL</div>
         <div style="background-color: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; padding: 12px 16px; margin-bottom: 16px; font-size: 12px; color: #1e40af;">

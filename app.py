@@ -900,6 +900,8 @@ def main():
         st.session_state["source_name"] = None
     if "ingestion_history" not in st.session_state:
         st.session_state["ingestion_history"] = []
+    if "uploader_key" not in st.session_state:
+        st.session_state["uploader_key"] = 0
 
     # Modern Light Topbar with Netshield Logo
     topbar_html = f"""
@@ -922,7 +924,7 @@ def main():
     model, encoders, scaler, _ = load_detection_assets()
 
     # ==============================================================================
-    # Sidebar: Data Ingestion
+    # Sidebar: Control Station & Engine Specification
     # ==============================================================================
     with st.sidebar:
         sidebar_logo_html = f"""
@@ -933,23 +935,16 @@ def main():
         """
         render_html(sidebar_logo_html)
 
-        render_html("<div style='font-size: 11px; font-weight: 700; letter-spacing: 0.05em; color: #64748b; text-transform: uppercase; margin-bottom: 8px;'>UPLOAD CYBER DATASET</div>")
-        
-        uploaded_file = st.file_uploader(
-            "Upload CSV File",
-            type=["csv"],
-            help="Upload network packet traffic, flow telemetry, or cyber attack incident logs"
-        )
-
-        # Immediate file upload feedback
-        if uploaded_file is not None:
-            render_html(f"""
-            <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; padding: 10px 14px; margin: 8px 0;">
-                <div style="font-size: 12px; font-weight: 600; color: #166534;">✓ File Attached &amp; Loaded</div>
-                <div style="font-size: 11px; color: #334155; margin-top: 2px;"><b>{uploaded_file.name}</b> ({uploaded_file.size / 1024:.1f} KB)</div>
-                <div style="font-size: 11px; color: #15803d; margin-top: 2px;">Ready for analysis / auto-ingested</div>
+        render_html("<div style='font-size: 11px; font-weight: 700; letter-spacing: 0.05em; color: #64748b; text-transform: uppercase; margin-bottom: 8px;'>TELEMETRY ENGINE STATUS</div>")
+        render_html("""
+        <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; padding: 10px 12px; margin-bottom: 14px;">
+            <div style="display: flex; align-items: center; gap: 6px;">
+                <span style="width: 8px; height: 8px; border-radius: 50%; background-color: #16a34a; display: inline-block;"></span>
+                <span style="font-size: 12px; font-weight: 700; color: #166534;">Online &amp; Operational</span>
             </div>
-            """)
+            <div style="font-size: 11px; color: #15803d; margin-top: 2px;">Dual ML Pipeline Ready</div>
+        </div>
+        """)
 
         row_limit = st.selectbox(
             "Sample Processing Limit",
@@ -959,24 +954,40 @@ def main():
         )
 
         render_html("<hr style='border-color: #e2e8f0; margin: 14px 0;'>")
-        col_act1, col_act2 = st.columns([3, 2])
-        with col_act1:
-            analyze_button = st.button("Process & Ingest", use_container_width=True)
-        with col_act2:
-            clear_button = st.button("Clear Data", use_container_width=True)
 
-        if clear_button:
-            st.session_state["data_mode"] = None
-            st.session_state["dataset_records"] = None
-            st.session_state["ground_truth"] = None
-            st.session_state["inference_time"] = 0.0
-            st.session_state["source_name"] = None
-            st.session_state["processed_file_id"] = None
-            st.rerun()
+        # Active File State in Sidebar
+        curr_rec = st.session_state.get("dataset_records")
+        curr_name = st.session_state.get("source_name")
+        curr_mode = st.session_state.get("data_mode")
+
+        if curr_rec is not None:
+            render_html(f"""
+            <div style="background-color: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; padding: 10px 12px; margin-bottom: 12px;">
+                <div style="font-size: 10px; font-weight: 700; color: #1e40af; text-transform: uppercase;">Active Ingested Dataset</div>
+                <div style="font-size: 12px; font-weight: 600; color: #0f172a; margin-top: 2px;">{curr_name}</div>
+                <div style="font-size: 11px; color: #3b82f6; margin-top: 2px;">{len(curr_rec):,} rows • {curr_mode}</div>
+            </div>
+            """)
+            if st.button("🗑️ Remove Current File", key="sidebar_clear_btn", use_container_width=True):
+                st.session_state["dataset_records"] = None
+                st.session_state["data_mode"] = None
+                st.session_state["ground_truth"] = None
+                st.session_state["inference_time"] = 0.0
+                st.session_state["source_name"] = None
+                st.session_state["processed_file_id"] = None
+                st.session_state["uploader_key"] += 1
+                st.rerun()
+        else:
+            render_html("""
+            <div style="background-color: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 6px; padding: 10px 12px; margin-bottom: 12px; text-align: center;">
+                <div style="font-size: 11px; font-weight: 600; color: #64748b;">No Active Dataset</div>
+                <div style="font-size: 10px; color: #94a3b8; margin-top: 2px;">Use the Data Ingestion tab to load CSV files</div>
+            </div>
+            """)
 
         # Pipeline Specification Card
         render_html("""
-        <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px; margin-top: 20px;">
+        <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px; margin-top: 10px;">
             <div style="font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase;">Adaptive Engine Specs</div>
             <div style="font-size: 12px; font-weight: 600; color: #0f172a; margin-top: 4px;">Universal Multi-Vector Anomaly Engine</div>
             <div style="font-size: 11px; color: #64748b; margin-top: 2px;">• Deep Packet Inspection &amp; Protocol Security</div>
@@ -985,23 +996,6 @@ def main():
             <div style="font-size: 11px; color: #059669; font-weight: 500; margin-top: 4px;">Status: All Pipelines Operational</div>
         </div>
         """)
-
-    # Handle Upload Trigger (Auto-ingests on new file attachment or when Process is clicked)
-    if uploaded_file is not None:
-        file_signature = f"{uploaded_file.name}_{uploaded_file.size}_{row_limit}"
-        need_processing = (
-            analyze_button or 
-            st.session_state.get("dataset_records") is None or 
-            st.session_state.get("source_name") != uploaded_file.name or 
-            st.session_state.get("processed_file_id") != file_signature
-        )
-        if need_processing:
-            st.session_state["processed_file_id"] = file_signature
-            with st.spinner("Analyzing dataset structure and running telemetry processing..."):
-                if ingest_and_process_stream(uploaded_file, uploaded_file.name, row_limit, model, encoders, scaler):
-                    st.rerun()
-    elif analyze_button:
-        st.warning("Please upload a CSV file first.")
 
     # Active State
     data_mode = st.session_state["data_mode"]
@@ -1014,45 +1008,201 @@ def main():
     # ==============================================================================
     # View Navigation Tabs
     # ==============================================================================
-    tab_analytics, tab_logs, tab_history, tab_manual = st.tabs([
-        "Threat & Telemetry Analytics",
-        "Record Logs & Export",
-        f"Ingestion History ({len(history)})",
-        "Attack Types Manual"
+    tab_ingest, tab_analytics, tab_logs, tab_history, tab_manual = st.tabs([
+        "📁 Data Ingestion & File Hub",
+        "📊 Threat & Telemetry Analytics",
+        "📋 Record Logs & Export",
+        f"⏱️ Ingestion History ({len(history)})",
+        "📖 Attack Types Manual"
     ])
 
     # ------------------------------------------------------------------------------
-    # Tab 1: Threat & Telemetry Analytics
+    # Tab 1: Data Ingestion & File Hub (Dedicated Space for Ingestion)
     # ------------------------------------------------------------------------------
-    with tab_analytics:
+    with tab_ingest:
+        render_html("""
+        <div style="margin-bottom: 16px;">
+            <div style="font-size: 16px; font-weight: 700; color: #0f172a;">Telemetry Ingestion &amp; Dataset Workspace</div>
+            <div style="font-size: 12px; color: #64748b; margin-top: 2px;">
+                Dedicated secure ingestion hub. Attach network captures, inspect column parameters, and execute AI anomaly detection on demand.
+            </div>
+        </div>
+        """)
+
         if records is None:
             render_html("""
-            <div style="background-color: #f8fafc; border: 2px dashed #3b82f6; border-radius: 8px; padding: 36px 20px; text-align: center; margin: 12px 0 18px 0;">
-                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="margin: 0 auto 12px auto;">
+            <div style="background-color: #f8fafc; border: 2px dashed #3b82f6; border-radius: 8px; padding: 28px 20px; text-align: center; margin: 8px 0 16px 0;">
+                <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="margin: 0 auto 10px auto;">
                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
                     <polyline points="17 8 12 3 7 8"/>
                     <line x1="12" y1="3" x2="12" y2="15"/>
                 </svg>
-                <div style="font-size: 17px; font-weight: 700; color: #0f172a; margin-bottom: 4px;">Upload &amp; Analyze Network Telemetry Dataset</div>
-                <div style="font-size: 13px; color: #64748b; max-width: 540px; margin: 0 auto;">
-                    Drag and drop or select your CSV file below to run real-time anomaly classification, threat scoring, and visual telemetry.
+                <div style="font-size: 16px; font-weight: 700; color: #0f172a; margin-bottom: 4px;">Attach CSV File for Telemetry Ingestion</div>
+                <div style="font-size: 12px; color: #64748b; max-width: 520px; margin: 0 auto;">
+                    Drag and drop or browse your CSV file below. The file will be staged for parameter inspection before running AI anomaly detection.
                 </div>
             </div>
             """)
-            
-            center_uploaded = st.file_uploader(
-                "Upload or Drop CSV Telemetry Dataset Here",
+
+            uploaded_file = st.file_uploader(
+                "Upload Network Telemetry CSV File",
                 type=["csv"],
-                key="center_telemetry_uploader",
-                help="Attach network traffic captures, flow telemetry, or threat breach logs"
+                key=f"ingest_file_uploader_{st.session_state['uploader_key']}",
+                help="Attach packet traffic captures, flow telemetry, or security breach logs"
             )
-            
-            if center_uploaded is not None:
-                with st.spinner("Processing telemetry and executing ML anomaly detection..."):
-                    if ingest_and_process_stream(center_uploaded, center_uploaded.name, row_limit, model, encoders, scaler):
-                        st.session_state["processed_file_id"] = f"{center_uploaded.name}_{center_uploaded.size}_{row_limit}"
-                        st.rerun()
-        elif data_mode == "INCIDENT":
+
+            if uploaded_file is not None:
+                # Read preview of first 5 rows
+                try:
+                    preview_df = pd.read_csv(uploaded_file, nrows=5)
+                    uploaded_file.seek(0)
+                    col_count = len(preview_df.columns)
+                except Exception:
+                    preview_df = None
+                    col_count = "N/A"
+
+                render_html(f"""
+                <div style="background-color: #f0fdf4; border: 1px solid #86efac; border-radius: 8px; padding: 16px; margin: 14px 0;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <div style="font-size: 14px; font-weight: 700; color: #166534;">✓ File Attached &amp; Ready for Ingestion</div>
+                            <div style="font-size: 12px; color: #334155; margin-top: 4px;">
+                                <b>{uploaded_file.name}</b> • {uploaded_file.size / 1024:.1f} KB • Detected {col_count} columns
+                            </div>
+                        </div>
+                        <span style="background-color: #dcfce7; color: #15803d; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 9999px;">READY TO INGEST</span>
+                    </div>
+                </div>
+                """)
+
+                if preview_df is not None:
+                    with st.expander("🔍 View Raw CSV Data Preview (First 5 Rows)", expanded=True):
+                        st.dataframe(preview_df, use_container_width=True)
+
+                col_b1, col_b2 = st.columns([3, 2])
+                with col_b1:
+                    run_ingest = st.button("🚀 Ingest & Run Telemetry Analysis", type="primary", use_container_width=True)
+                with col_b2:
+                    remove_staged = st.button("🗑️ Remove Attached File", use_container_width=True)
+
+                if remove_staged:
+                    st.session_state["uploader_key"] += 1
+                    st.rerun()
+
+                if run_ingest:
+                    with st.spinner("Analyzing dataset structure, running Random Forest classification, and profiling threat vectors..."):
+                        if ingest_and_process_stream(uploaded_file, uploaded_file.name, row_limit, model, encoders, scaler):
+                            st.rerun()
+
+            else:
+                # Helper guidance cards
+                render_html("""
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-top: 14px;">
+                    <div style="background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px;">
+                        <div style="font-size: 12px; font-weight: 700; color: #2563eb; margin-bottom: 4px;">Deep Packet Inspection</div>
+                        <div style="font-size: 11px; color: #64748b; line-height: 1.5;">Evaluates 41 connection features: protocol type, service, TCP flags, byte volume, and error rates.</div>
+                    </div>
+                    <div style="background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px;">
+                        <div style="font-size: 12px; font-weight: 700; color: #059669; margin-bottom: 4px;">Network Flow Telemetry</div>
+                        <div style="font-size: 11px; color: #64748b; line-height: 1.5;">Evaluates 79 volumetric flow features: packet inter-arrival times, payload sizes, and flow durations.</div>
+                    </div>
+                    <div style="background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px;">
+                        <div style="font-size: 12px; font-weight: 700; color: #7c3aed; margin-bottom: 4px;">Threat Incident Auditing</div>
+                        <div style="font-size: 11px; color: #64748b; line-height: 1.5;">Parses enterprise cyber breach logs: vector categorization, financial impact, and resolution timeline.</div>
+                    </div>
+                </div>
+                """)
+
+        else:
+            # An active dataset is already ingested!
+            anomaly_cnt = (records['prediction'] == 1).sum() if 'prediction' in records.columns else len(records)
+            anomaly_pct = (anomaly_cnt / len(records) * 100) if len(records) > 0 else 0.0
+
+            render_html(f"""
+            <div style="background-color: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 18px; margin: 10px 0 16px 0;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="background-color: #dcfce7; color: #166534; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 9999px;">CURRENTLY INGESTED</span>
+                        <span style="font-size: 16px; font-weight: 700; color: #0f172a;">{source_name}</span>
+                    </div>
+                    <span style="font-size: 12px; color: #64748b;">Processing Latency: <b>{inference_time * 1000:.1f} ms</b></span>
+                </div>
+                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 14px;">
+                    <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px;">
+                        <div style="font-size: 11px; color: #64748b;">Ingested Records</div>
+                        <div style="font-size: 18px; font-weight: 700; color: #0f172a;">{len(records):,}</div>
+                    </div>
+                    <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px;">
+                        <div style="font-size: 11px; color: #64748b;">Telemetry Mode</div>
+                        <div style="font-size: 18px; font-weight: 700; color: #2563eb;">{data_mode}</div>
+                    </div>
+                    <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px;">
+                        <div style="font-size: 11px; color: #64748b;">Anomalies Detected</div>
+                        <div style="font-size: 18px; font-weight: 700; color: #dc2626;">{anomaly_cnt:,}</div>
+                    </div>
+                    <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px;">
+                        <div style="font-size: 11px; color: #64748b;">Threat Ratio</div>
+                        <div style="font-size: 18px; font-weight: 700; color: #f59e0b;">{anomaly_pct:.1f}%</div>
+                    </div>
+                </div>
+            </div>
+            """)
+
+            col_m1, col_m2 = st.columns([3, 2])
+            with col_m1:
+                st.info("💡 Analysis is complete! Click the **'Threat & Telemetry Analytics'** tab to inspect full charts, risk distributions, and mitigations.")
+            with col_m2:
+                if st.button("🗑️ Remove Current File & Ingest Another", type="primary", use_container_width=True, key="ingest_active_remove_btn"):
+                    st.session_state["dataset_records"] = None
+                    st.session_state["data_mode"] = None
+                    st.session_state["ground_truth"] = None
+                    st.session_state["inference_time"] = 0.0
+                    st.session_state["source_name"] = None
+                    st.session_state["processed_file_id"] = None
+                    st.session_state["uploader_key"] += 1
+                    st.rerun()
+
+    # ------------------------------------------------------------------------------
+    # Tab 2: Threat & Telemetry Analytics
+    # ------------------------------------------------------------------------------
+    with tab_analytics:
+        if records is None:
+            render_html("""
+            <div style="background-color: #f8fafc; border: 2px dashed #cbd5e1; border-radius: 8px; padding: 50px 20px; text-align: center; margin: 20px 0;">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="margin: 0 auto 12px auto;">
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="12" y1="8" x2="12" y2="12"/>
+                    <line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+                <div style="font-size: 17px; font-weight: 700; color: #0f172a; margin-bottom: 6px;">No Telemetry Dataset Ingested Yet</div>
+                <div style="font-size: 13px; color: #64748b; max-width: 520px; margin: 0 auto;">
+                    Please go to the <b>'📁 Data Ingestion &amp; File Hub'</b> tab, attach your CSV dataset, and click <b>'🚀 Ingest &amp; Run Telemetry Analysis'</b> to generate real-time metrics, risk distribution, and threat classification.
+                </div>
+            </div>
+            """)
+        else:
+            # Active Dataset Top Bar with prominent Remove File & Ingest Another button
+            col_bar1, col_bar2 = st.columns([4, 1])
+            with col_bar1:
+                render_html(f"""
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px;">
+                    <span style="font-size: 13px; font-weight: 700; color: #0f172a;">Active File:</span>
+                    <span style="font-size: 13px; font-weight: 600; color: #2563eb; background: #eff6ff; padding: 2px 8px; border-radius: 4px;">{source_name}</span>
+                    <span style="font-size: 12px; color: #64748b;">({len(records):,} records • {data_mode} mode)</span>
+                </div>
+                """)
+            with col_bar2:
+                if st.button("🗑️ Remove File & Ingest Another", use_container_width=True, key="analytics_remove_file_top_btn"):
+                    st.session_state["dataset_records"] = None
+                    st.session_state["data_mode"] = None
+                    st.session_state["ground_truth"] = None
+                    st.session_state["inference_time"] = 0.0
+                    st.session_state["source_name"] = None
+                    st.session_state["processed_file_id"] = None
+                    st.session_state["uploader_key"] += 1
+                    st.rerun()
+
+        if records is not None and data_mode == "INCIDENT":
             # ==================================================================
             # Render Mode: Cyber Attack Incident & Threat Intelligence
             # ==================================================================
@@ -1233,7 +1383,7 @@ def main():
                     )
                     st.plotly_chart(fig_sc, use_container_width=True, config={"displayModeBar": False})
 
-        else:
+        elif records is not None:
             # ==================================================================
             # Render Mode: Network Traffic Anomaly & Flow Telemetry (PACKET or FLOW)
             # ==================================================================
@@ -1500,11 +1650,11 @@ def main():
                     st.plotly_chart(fig_flow_sc, use_container_width=True, config={"displayModeBar": False})
 
     # ------------------------------------------------------------------------------
-    # Tab 2: Record Logs & Export
+    # Tab 3: Record Logs & Export
     # ------------------------------------------------------------------------------
     with tab_logs:
         if records is None:
-            st.info("No records loaded yet. Upload and analyze a dataset to inspect logs.")
+            st.info("No records loaded yet. Please ingest a CSV dataset in the '📁 Data Ingestion & File Hub' tab first.")
         elif data_mode == "INCIDENT":
             df = records.copy()
             render_html("<div style='font-size: 12px; font-weight: 700; letter-spacing: 0.05em; color: #64748b; text-transform: uppercase; margin: 10px 0;'>FILTER CYBER INCIDENT AUDIT RECORDS</div>")
